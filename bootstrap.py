@@ -1426,6 +1426,320 @@ Choose **3** (Claude Code, default) and answer the prompts.
 '''
 
 # ════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════
+FILES["auto_pipeline.py"] = r'''#!/usr/bin/env python3
+"""
+auto_pipeline.py — Automated ML Pipeline (no Claude/AI required)
+Usage: python3 auto_pipeline.py
+       .venv/bin/python auto_pipeline.py
+"""
+
+import json
+import os
+import sys
+import warnings
+from pathlib import Path
+
+warnings.filterwarnings("ignore")
+
+G = "\033[0;32m"; C = "\033[0;36m"; B = "\033[1m"
+Y = "\033[1;33m"; R = "\033[0;31m"; X = "\033[0m"
+
+ROOT = Path(__file__).parent.resolve()
+os.chdir(ROOT)
+
+CONFIG_PATH = ROOT / ".ml_config.json"
+DATA_DIR    = ROOT / "data"
+MODELS_DIR  = ROOT / "models"
+PLOTS_DIR   = ROOT / "plots"
+DOCS_DIR    = ROOT / "docs"
+
+for d in (DATA_DIR, MODELS_DIR, PLOTS_DIR, DOCS_DIR):
+    d.mkdir(parents=True, exist_ok=True)
+
+def _print_header(text):
+    width = 60
+    print(f"\n{C}{B}{\'═\' * width}{X}")
+    print(f"{C}{B}  {text}{X}")
+    print(f"{C}{B}{\'═\' * width}{X}")
+
+def _ok(msg):   print(f"  {G}✔  {msg}{X}")
+def _warn(msg): print(f"  {Y}⚠  {msg}{X}")
+def _err(msg):  print(f"  {R}✗  {msg}{X}")
+def _info(msg): print(f"  {C}→  {msg}{X}")
+
+_print_header("Step 1 — Loading Configuration")
+
+if not CONFIG_PATH.exists():
+    _err(f".ml_config.json not found at {CONFIG_PATH}")
+    dataset_input = input(f"  {B}Dataset CSV path (or filename inside data/): {X}").strip()
+    target_input  = input(f"  {B}Target column name (press Enter to auto-detect): {X}").strip()
+    cfg = {"dataset_path": dataset_input, "target_column": target_input or None,
+           "deployment_platform": "none", "github_username": "", "github_repo": "", "github_visibility": "public"}
+    CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+    _ok(f".ml_config.json written → {CONFIG_PATH}")
+else:
+    with open(CONFIG_PATH) as fh:
+        cfg = json.load(fh)
+    _ok(f"Config loaded from {CONFIG_PATH}")
+
+dataset_path_raw = cfg.get("dataset_path", "")
+target_col_cfg   = cfg.get("target_column") or None
+platform         = cfg.get("deployment_platform", "none")
+
+csv_path = None
+if dataset_path_raw:
+    p = Path(dataset_path_raw).expanduser()
+    if p.is_absolute() and p.is_file():
+        csv_path = p
+    else:
+        for candidate in (ROOT / p, ROOT / "data" / p.name, ROOT / "data" / p):
+            if Path(candidate).is_file():
+                csv_path = Path(candidate); break
+
+if csv_path is None:
+    csvs = list(DATA_DIR.glob("*.csv"))
+    if csvs:
+        csv_path = csvs[0]
+        _warn(f"dataset_path not found; using auto-discovered: {csv_path.name}")
+
+if csv_path is None:
+    _err("No CSV dataset found.")
+    _info(f"Copy your dataset into: {DATA_DIR}/")
+    _info("Then re-run: .venv/bin/python auto_pipeline.py")
+    sys.exit(1)
+
+_ok(f"Dataset: {csv_path}")
+
+try:
+    import numpy as np
+    import pandas as pd
+    import matplotlib; matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import joblib
+    from sklearn.compose import ColumnTransformer
+    from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression, Ridge
+    from sklearn.metrics import accuracy_score, classification_report, mean_squared_error, r2_score
+    from sklearn.model_selection import GridSearchCV, train_test_split
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import LabelEncoder, OneHotEncoder, RobustScaler, StandardScaler
+except ImportError as exc:
+    _err(f"Missing dependency: {exc}")
+    _info("Run: .venv/bin/pip install -r requirements.txt")
+    sys.exit(1)
+
+_ok("All dependencies imported")
+
+_print_header("Step 2 — EDA & Data Inspection")
+
+try:
+    df = pd.read_csv(csv_path)
+except Exception as exc:
+    _err(f"Could not read CSV: {exc}"); sys.exit(1)
+
+_ok(f"Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
+
+if target_col_cfg and target_col_cfg in df.columns:
+    target_col = target_col_cfg
+    _ok(f"Target column (from config): {B}{target_col}{X}")
+else:
+    target_col = df.columns[-1]
+    _warn(f"Target column not specified; guessing last column: {B}{target_col}{X}")
+
+n_unique = df[target_col].nunique()
+task_type = "classification" if (df[target_col].dtype in (object, bool, "bool") or n_unique <= 20) else "regression"
+_ok(f"Task type: {B}{task_type}{X}  (unique target values: {n_unique})")
+
+print(f"\n{B}Column dtypes:{X}"); print(df.dtypes.to_string())
+missing = df.isnull().sum()
+missing_df = pd.DataFrame({"missing": missing, "pct": (missing / len(df) * 100).round(1)})
+missing_with = missing_df[missing_df["missing"] > 0]
+if not missing_with.empty:
+    print(f"\n{B}Missing values:{X}"); print(missing_with.to_string())
+else:
+    _ok("No missing values")
+
+if task_type == "classification":
+    print(f"\n{B}Class balance ({target_col}):{X}"); print(df[target_col].value_counts().to_string())
+else:
+    print(f"\n{B}Target distribution ({target_col}):{X}"); print(df[target_col].describe().to_string())
+
+_info("Saving EDA plots...")
+heatmap_path = target_plot_path = None
+
+try:
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    if len(numeric_cols) >= 2:
+        fig, ax = plt.subplots(figsize=(max(6, len(numeric_cols)), max(5, len(numeric_cols) - 1)))
+        sns.heatmap(df[numeric_cols].corr(), annot=True, fmt=".2f", cmap="coolwarm", ax=ax, linewidths=0.5, square=True)
+        ax.set_title("Feature Correlation Heatmap", fontsize=14, pad=12)
+        plt.tight_layout()
+        heatmap_path = PLOTS_DIR / "eda_correlation.png"
+        fig.savefig(heatmap_path, dpi=100, bbox_inches="tight"); plt.close(fig)
+        _ok(f"Saved: {heatmap_path}")
+except Exception as exc:
+    _warn(f"Correlation heatmap failed: {exc}")
+
+try:
+    fig, ax = plt.subplots(figsize=(8, 5))
+    if task_type == "classification":
+        vc = df[target_col].value_counts()
+        ax.bar(vc.index.astype(str), vc.values, color="#4C8CBF", edgecolor="white")
+        ax.set_xlabel(target_col); ax.set_ylabel("Count")
+    else:
+        ax.hist(df[target_col].dropna(), bins=40, color="#4C8CBF", edgecolor="white")
+        ax.set_xlabel(target_col); ax.set_ylabel("Frequency")
+    ax.set_title(f"Target Distribution — {target_col}", fontsize=13)
+    plt.tight_layout()
+    target_plot_path = PLOTS_DIR / "eda_target.png"
+    fig.savefig(target_plot_path, dpi=100, bbox_inches="tight"); plt.close(fig)
+    _ok(f"Saved: {target_plot_path}")
+except Exception as exc:
+    _warn(f"Target distribution plot failed: {exc}")
+
+_print_header("Step 3 — Preprocessing")
+
+X = df.drop(columns=[target_col]).copy()
+y = df[target_col].copy()
+
+high_missing = [c for c in X.columns if X[c].isnull().mean() > 0.5]
+if high_missing:
+    _warn(f"Dropping columns with >50% missing: {high_missing}")
+    X = X.drop(columns=high_missing)
+
+numeric_features     = X.select_dtypes(include=[np.number]).columns.tolist()
+categorical_features = X.select_dtypes(exclude=[np.number]).columns.tolist()
+_ok(f"Numeric features  ({len(numeric_features)}): {numeric_features}")
+_ok(f"Categorical features ({len(categorical_features)}): {categorical_features}")
+
+label_encoder = None
+if task_type == "classification":
+    label_encoder = LabelEncoder()
+    y_enc = label_encoder.fit_transform(y.astype(str))
+    _ok(f"Target classes: {list(label_encoder.classes_)}")
+else:
+    y_enc = y.values.astype(float)
+
+split_kwargs = {"test_size": 0.2, "random_state": 42}
+if task_type == "classification": split_kwargs["stratify"] = y_enc
+X_train, X_test, y_train, y_test = train_test_split(X, y_enc, **split_kwargs)
+_ok(f"Train: {X_train.shape}  Test: {X_test.shape}")
+
+scaler = StandardScaler() if task_type == "classification" else RobustScaler()
+transformers = []
+if numeric_features:
+    transformers.append(("num", Pipeline([("imputer", SimpleImputer(strategy="median")), ("scaler", scaler)]), numeric_features))
+if categorical_features:
+    transformers.append(("cat", Pipeline([("imputer", SimpleImputer(strategy="most_frequent")), ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))]), categorical_features))
+if not transformers:
+    _err("No features found."); sys.exit(1)
+
+ct = ColumnTransformer(transformers=transformers, remainder="drop")
+_ok("ColumnTransformer built")
+
+_print_header("Step 4 — Model Training & Hyperparameter Search")
+
+if task_type == "classification":
+    candidates = [
+        ("LogisticRegression", LogisticRegression(solver="saga", random_state=42, max_iter=1000), {"model__C": [0.1, 1, 10]}),
+        ("RandomForest",       RandomForestClassifier(random_state=42),                           {"model__n_estimators": [100, 200], "model__max_depth": [None, 5]}),
+        ("GradientBoosting",   GradientBoostingClassifier(random_state=42),                       {"model__n_estimators": [100, 200], "model__learning_rate": [0.05, 0.1]}),
+    ]; scoring = "accuracy"
+else:
+    candidates = [
+        ("Ridge",            Ridge(),                                    {"model__alpha": [0.1, 1.0, 10.0]}),
+        ("RandomForest",     RandomForestRegressor(random_state=42),     {"model__n_estimators": [100, 200], "model__max_depth": [None, 5]}),
+        ("GradientBoosting", GradientBoostingRegressor(random_state=42), {"model__n_estimators": [100, 200], "model__learning_rate": [0.05, 0.1]}),
+    ]; scoring = "r2"
+
+results = []
+for name, estimator, param_grid in candidates:
+    try:
+        _info(f"Training {B}{name}{X} with GridSearchCV(cv=3)...")
+        gs = GridSearchCV(Pipeline([("preprocessor", ct), ("model", estimator)]), param_grid, cv=3, n_jobs=-1, scoring=scoring, refit=True)
+        gs.fit(X_train, y_train)
+        best_params = {k.replace("model__", ""): v for k, v in gs.best_params_.items()}
+        results.append({"name": name, "gs": gs, "cv_score": gs.best_score_, "best_params": best_params, "best_estimator": gs.best_estimator_})
+        _ok(f"{name}: CV {scoring} = {gs.best_score_:.4f}  params={best_params}")
+    except Exception as exc:
+        _err(f"{name} failed, skipping: {exc}")
+
+if not results:
+    _err("All models failed. Check your dataset."); sys.exit(1)
+
+best_result = max(results, key=lambda r: r["cv_score"])
+best_name   = best_result["name"]
+best_params = best_result["best_params"]
+best_cv     = best_result["cv_score"]
+
+_print_header("Step 5 — Best Model & Final Evaluation")
+print(f"\n  {G}{B}Best model: {best_name}{X}")
+print(f"  CV {scoring}: {best_cv:.4f}  Hyperparams: {best_params}")
+
+_info("Refitting best pipeline on full training set...")
+final_pipe = Pipeline([
+    ("preprocessor", ColumnTransformer(transformers=transformers, remainder="drop")),
+    ("model", best_result["best_estimator"].named_steps["model"]),
+])
+final_pipe.fit(X_train, y_train)
+_ok("Final pipeline fitted")
+
+y_pred  = final_pipe.predict(X_test)
+metrics = {}
+
+if task_type == "classification":
+    acc    = accuracy_score(y_test, y_pred)
+    report = classification_report(y_test, y_pred, target_names=[str(c) for c in label_encoder.classes_] if label_encoder else None)
+    metrics["accuracy"] = acc; metrics["classification_report"] = report
+    print(f"\n  {B}Test Accuracy: {G}{acc:.4f}{X}")
+    print(f"\n{B}Classification Report:{X}\n{report}")
+else:
+    rmse = float(np.sqrt(mean_squared_error(y_test, y_pred)))
+    r2   = float(r2_score(y_test, y_pred))
+    metrics["rmse"] = rmse; metrics["r2"] = r2
+    print(f"\n  {B}Test RMSE : {G}{rmse:.4f}{X}")
+    print(f"  {B}Test R²   : {G}{r2:.4f}{X}")
+
+_print_header("Step 6 — Saving Artifacts")
+pipeline_path = MODELS_DIR / "final_pipeline.pkl"
+joblib.dump(final_pipe, pipeline_path); _ok(f"Final pipeline → {pipeline_path}")
+le_path = None
+if label_encoder is not None:
+    le_path = MODELS_DIR / "label_encoder.pkl"
+    joblib.dump(label_encoder, le_path); _ok(f"Label encoder → {le_path}")
+
+_print_header("Step 7 — Writing Summary Report")
+
+from datetime import datetime
+now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+if task_type == "classification":
+    metrics_section = f"| Metric | Value |\n|---|---|\n| Test Accuracy | {metrics[\'accuracy\']:.4f} |\n| CV Score | {best_cv:.4f} |\n\n**Classification Report:**\n```\n{metrics[\'classification_report\']}\n```"
+else:
+    metrics_section = f"| Metric | Value |\n|---|---|\n| Test RMSE | {metrics[\'rmse\']:.4f} |\n| Test R² | {metrics[\'r2\']:.4f} |\n| CV Score | {best_cv:.4f} |"
+
+candidates_table = "\n".join(f"| {r[\'name\']} | {r[\'cv_score\']:.4f} | {r[\'best_params\']} |" for r in sorted(results, key=lambda r: r["cv_score"], reverse=True))
+artifact_rows = f"| models/final_pipeline.pkl | Trained sklearn Pipeline |\n"
+if le_path:     artifact_rows += f"| models/label_encoder.pkl | Fitted LabelEncoder |\n"
+if heatmap_path: artifact_rows += f"| plots/eda_correlation.png | Correlation heatmap |\n"
+if target_plot_path: artifact_rows += f"| plots/eda_target.png | Target distribution |\n"
+
+summary_md = f"""# ML Pipeline Summary\n_Generated by auto_pipeline.py on {now_str}_\n\n---\n\n## 1. Dataset\n| Property | Value |\n|---|---|\n| File | {csv_path.name} |\n| Rows | {df.shape[0]:,} |\n| Columns | {df.shape[1]} |\n| Target | `{target_col}` |\n| Task | **{task_type.title()}** |\n\n## 2. Model Results\nGridSearchCV(cv=3, scoring="{scoring}")\n\n| Model | CV Score | Best Params |\n|---|---|---|\n{candidates_table}\n\n**Winner:** `{best_name}` — CV {scoring} = **{best_cv:.4f}**\n\n## 3. Evaluation\n{metrics_section}\n\n## 4. Artifacts\n| File | Description |\n|---|---|\n{artifact_rows}\n\n## 5. Reproducibility\n```python\nimport joblib, pandas as pd\npipeline = joblib.load("models/final_pipeline.pkl")\ndf = pd.read_csv("data/{csv_path.name}")\nX = df.drop(columns=["{target_col}"])\nprint(pipeline.predict(X))\n```\n"""
+
+summary_path = DOCS_DIR / "auto_summary.md"
+summary_path.write_text(summary_md, encoding="utf-8")
+_ok(f"Summary report → {summary_path}")
+
+print(f"\n{C}{B}╔══════════════════════════════════════════════════════╗\n║  ✅  Pipeline Complete!                              ║\n╠══════════════════════════════════════════════════════╣{X}\n{C}{B}║{X}  Dataset    : {csv_path.name} ({df.shape[0]:,} rows × {df.shape[1]} cols)\n{C}{B}║{X}  Task       : {task_type.title()}\n{C}{B}║{X}  Best Model : {best_name}\n{C}{B}║{X}  CV Score   : {best_cv:.4f}  ({scoring})""")
+if task_type == "classification": print(f"{C}{B}║{X}  Accuracy   : {metrics[\'accuracy\']:.4f}")
+else: print(f"{C}{B}║{X}  RMSE: {metrics[\'rmse\']:.4f}  R²: {metrics[\'r2\']:.4f}")
+print(f"{C}{B}╠══════════════════════════════════════════════════════╣{X}\n{C}{B}║{X}  {G}models/final_pipeline.pkl{X}  ← ready to use\n{C}{B}║{X}  {G}docs/auto_summary.md{X}       ← full report\n{C}{B}╚══════════════════════════════════════════════════════╝{X}\n")
+'''
+
 # .gitkeep for empty directories
 FILES["data/.gitkeep"]   = ""
 FILES["models/.gitkeep"] = ""
