@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+LABEL description="ML Pipeline Template — Bootstrap via Docker"
+LABEL usage="docker run --rm -v \$(pwd):/output buils_bootstrap"
+
+WORKDIR /app
+
+# Copy only bootstrap.py into the image
+COPY bootstrap.py .
+
+# Default output directory (mount your host directory here)
+VOLUME ["/output"]
+
+# Run bootstrap.py non-interactively, writing the project into /output
+# Users can override CMD to pass arguments to bootstrap.py
+ENTRYPOINT ["python3", "bootstrap.py"]

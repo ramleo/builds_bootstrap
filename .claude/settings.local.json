@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/pip install --upgrade *)",
+      "Bash(.venv/bin/pip show *)",
+      "Bash(.venv/bin/pip list *)",
+      "Bash(.venv/bin/python *)",
+      "Bash(.venv/bin/uvicorn *)",
+      "Bash(python3 *)",
+      "Bash(pip3 install *)",
+      "Bash(pip install *)",
+      "Bash(pkill -f uvicorn*)",
+      "Bash(curl *)",
+      "Bash(git init)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git remote *)",
+      "Bash(git status)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(gh repo create *)",
+      "Bash(gh auth status)",
+      "Bash(gh api *)",
+      "Bash(docker build *)",
+      "Bash(docker run *)",
+      "Bash(docker stop *)",
+      "Bash(docker rm *)",
+      "Bash(docker images *)",
+      "Bash(docker ps *)",
+      "Bash(mkdir -p *)",
+      "Bash(mv *)",
+      "Bash(cp *)",
+      "Bash(rm -rf __pycache__)",
+      "Bash(find . -name __pycache__ *)",
+      "Bash(find . -name *.pyc *)",
+      "Bash(chmod +x *)"
+    ]
+  }
+}
