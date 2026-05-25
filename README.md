@@ -162,6 +162,21 @@ Edit the local `CLAUDE.md` files in subdirectories to change agent behaviour:
 
 ---
 
+## Share with Someone
+
+Send them this message:
+
+> Drop your CSV anywhere, then run:
+> ```bash
+> curl -O https://raw.githubusercontent.com/ramleo/builds_bootstrap/main/bootstrap.py
+> python3 bootstrap.py
+> ```
+> Answer the prompts (project name, CSV path, deployment platform). It auto-installs everything and builds your ML pipeline end-to-end.
+
+Full guide: [docs/how_to_run.md](docs/how_to_run.md)
+
+---
+
 ## License
 
 MIT — free to use, modify, and distribute.
