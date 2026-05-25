@@ -75,7 +75,25 @@ Auto-installs any missing prerequisites, then shows a menu:
   3) Claude Code   — AI-driven, fully automated (recommended)
 ```
 
-All three options work the same way: answer a few terminal prompts (project name, CSV path, platform, GitHub), then the script creates a new project folder, sets up the Python environment with all dependencies installed, and launches Claude Code automatically.
+After setup, a second menu lets you choose how to run the pipeline:
+
+```
+  1) Claude Code   — AI-driven, fully automated (recommended)
+  2) Auto Pipeline — no Claude subscription needed (pure sklearn)
+  3) Manual        — I'll run it myself later
+```
+
+**Option 2 (Auto Pipeline)** runs without any Claude subscription and includes a post-pipeline menu:
+
+```
+  1) Generate FastAPI app + Dockerfile
+  2) Push to GitHub
+  3) Deploy to Render
+  4) All of the above ← recommended
+  5) Done — I'll handle it myself
+```
+
+All three options work the same way: answer a few terminal prompts (project name, CSV path, platform, GitHub), then the script creates a new project folder, sets up the Python environment with all dependencies installed, and launches your chosen option automatically.
 
 Choose **3** (or press Enter — it is the default).
 
