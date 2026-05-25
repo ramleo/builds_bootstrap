@@ -1177,7 +1177,8 @@ def _make_staging_dir(project_dir):
 def create_project(cfg):
     template_dir = Path(__file__).parent.resolve()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    project_dir = template_dir.parent / f"{cfg[\'project_name\']}_{timestamp}"
+    _pname = cfg["project_name"]
+    project_dir = template_dir.parent / f"{_pname}_{timestamp}"
     staging_dir = _make_staging_dir(project_dir)
     return project_dir, staging_dir
 
@@ -1202,14 +1203,15 @@ def copy_dataset(cfg, staging_dir):
     if cfg["dataset_path"] and Path(cfg["dataset_path"]).is_file():
         dest = staging_dir / "data"; dest.mkdir(exist_ok=True)
         shutil.copy2(cfg["dataset_path"], dest / cfg["dataset_filename"])
-        print(f"  {G}✔ Dataset copied: {cfg[\'dataset_filename\']}{X}")
+        _dfn = cfg["dataset_filename"]
+        print(f"  {G}✔ Dataset copied: {_dfn}{X}")
 
 def write_config(cfg, staging_dir):
     py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     gh_user = cfg.get("github_username",""); gh_repo = cfg.get("github_repo", cfg["project_name"])
     config = {"project_name": cfg["project_name"],
               "dataset_filename": cfg["dataset_filename"] or "<not provided yet>",
-              "dataset_path": f"data/{cfg[\'dataset_filename\']}" if cfg["dataset_filename"] else "<not provided yet>",
+              "dataset_path": ("data/" + cfg["dataset_filename"]) if cfg["dataset_filename"] else "<not provided yet>",
               "target_column": "auto-detect", "task_type": "auto-detect",
               "deployment_platform": cfg["platform"], "github_username": gh_user,
               "github_repo": gh_repo, "github_visibility": cfg["github_visibility"],
@@ -1718,11 +1720,13 @@ from datetime import datetime
 now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 if task_type == "classification":
-    metrics_section = f"| Metric | Value |\n|---|---|\n| Test Accuracy | {metrics[\'accuracy\']:.4f} |\n| CV Score | {best_cv:.4f} |\n\n**Classification Report:**\n```\n{metrics[\'classification_report\']}\n```"
+    _acc = metrics["accuracy"]; _rep = metrics["classification_report"]
+    metrics_section = f"| Metric | Value |\n|---|---|\n| Test Accuracy | {_acc:.4f} |\n| CV Score | {best_cv:.4f} |\n\n**Classification Report:**\n```\n{_rep}\n```"
 else:
-    metrics_section = f"| Metric | Value |\n|---|---|\n| Test RMSE | {metrics[\'rmse\']:.4f} |\n| Test R² | {metrics[\'r2\']:.4f} |\n| CV Score | {best_cv:.4f} |"
+    _rmse = metrics["rmse"]; _r2 = metrics["r2"]
+    metrics_section = f"| Metric | Value |\n|---|---|\n| Test RMSE | {_rmse:.4f} |\n| Test R2 | {_r2:.4f} |\n| CV Score | {best_cv:.4f} |"
 
-candidates_table = "\n".join(f"| {r[\'name\']} | {r[\'cv_score\']:.4f} | {r[\'best_params\']} |" for r in sorted(results, key=lambda r: r["cv_score"], reverse=True))
+candidates_table = "\n".join("| " + r["name"] + " | " + str(round(r["cv_score"], 4)) + " | " + str(r["best_params"]) + " |" for r in sorted(results, key=lambda r: r["cv_score"], reverse=True))
 artifact_rows = f"| models/final_pipeline.pkl | Trained sklearn Pipeline |\n"
 if le_path:     artifact_rows += f"| models/label_encoder.pkl | Fitted LabelEncoder |\n"
 if heatmap_path: artifact_rows += f"| plots/eda_correlation.png | Correlation heatmap |\n"
@@ -1735,8 +1739,12 @@ summary_path.write_text(summary_md, encoding="utf-8")
 _ok(f"Summary report → {summary_path}")
 
 print(f"\n{C}{B}╔══════════════════════════════════════════════════════╗\n║  ✅  Pipeline Complete!                              ║\n╠══════════════════════════════════════════════════════╣{X}\n{C}{B}║{X}  Dataset    : {csv_path.name} ({df.shape[0]:,} rows × {df.shape[1]} cols)\n{C}{B}║{X}  Task       : {task_type.title()}\n{C}{B}║{X}  Best Model : {best_name}\n{C}{B}║{X}  CV Score   : {best_cv:.4f}  ({scoring})""")
-if task_type == "classification": print(f"{C}{B}║{X}  Accuracy   : {metrics[\'accuracy\']:.4f}")
-else: print(f"{C}{B}║{X}  RMSE: {metrics[\'rmse\']:.4f}  R²: {metrics[\'r2\']:.4f}")
+if task_type == "classification":
+    _acc2 = metrics["accuracy"]
+    print(f"{C}{B}║{X}  Accuracy   : {_acc2:.4f}")
+else:
+    _rmse2 = metrics["rmse"]; _r2_2 = metrics["r2"]
+    print(f"{C}{B}║{X}  RMSE: {_rmse2:.4f}  R2: {_r2_2:.4f}")
 print(f"{C}{B}╠══════════════════════════════════════════════════════╣{X}\n{C}{B}║{X}  {G}models/final_pipeline.pkl{X}  ← ready to use\n{C}{B}║{X}  {G}docs/auto_summary.md{X}       ← full report\n{C}{B}╚══════════════════════════════════════════════════════╝{X}\n")
 '''
 
