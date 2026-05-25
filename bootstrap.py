@@ -1458,10 +1458,10 @@ for d in (DATA_DIR, MODELS_DIR, PLOTS_DIR, DOCS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 def _print_header(text):
-    width = 60
-    print(f"\n{C}{B}{\'═\' * width}{X}")
+    sep = "═" * 60
+    print(f"\n{C}{B}{sep}{X}")
     print(f"{C}{B}  {text}{X}")
-    print(f"{C}{B}{\'═\' * width}{X}")
+    print(f"{C}{B}{sep}{X}")
 
 def _ok(msg):   print(f"  {G}✔  {msg}{X}")
 def _warn(msg): print(f"  {Y}⚠  {msg}{X}")
