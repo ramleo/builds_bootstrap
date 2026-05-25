@@ -7,8 +7,8 @@ Usage:
   python3 bootstrap.py          # interactive prompts → my-project_TIMESTAMP/
 
 Via Docker:
-  docker build -t buils_bootstrap -f Dockerfile.bootstrap .
-  docker run --rm -v $(pwd):/output buils_bootstrap
+  docker build -t builds_bootstrap -f Dockerfile.bootstrap .
+  docker run --rm -v $(pwd):/output builds_bootstrap
 """
 
 import os, sys, stat, shutil, subprocess, json
@@ -1298,15 +1298,15 @@ FILES["README.md"] = '''# 🤖 ML Pipeline Template
 
 ### 🔥 Bootstrap (no git, no clone required)
 ```bash
-curl -O https://raw.githubusercontent.com/ramleo/buils_bootstrap/main/bootstrap.py
+curl -O https://raw.githubusercontent.com/ramleo/builds_bootstrap/main/bootstrap.py
 python3 bootstrap.py
-cd buils_bootstrap
+cd builds_bootstrap
 ```
 
 ### 📦 Git Clone
 ```bash
-git clone https://github.com/ramleo/buils_bootstrap
-cd buils_bootstrap
+git clone https://github.com/ramleo/builds_bootstrap
+cd builds_bootstrap
 ```
 
 ---
@@ -1395,7 +1395,7 @@ python3 --version
 
 ## Step 2 — Download the bootstrap script
 ```bash
-curl -O https://raw.githubusercontent.com/ramleo/buils_bootstrap/main/bootstrap.py
+curl -O https://raw.githubusercontent.com/ramleo/builds_bootstrap/main/bootstrap.py
 ```
 
 ## Step 3 — Run the bootstrap
@@ -1405,7 +1405,7 @@ python3 bootstrap.py
 
 ## Step 4 — Enter the folder
 ```bash
-cd buils_bootstrap
+cd builds_bootstrap
 ```
 
 ## Step 5 — Start the wizard

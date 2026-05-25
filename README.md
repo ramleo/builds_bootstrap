@@ -41,22 +41,22 @@ Choose any one method:
 
 ### 🔥 Bootstrap (no git, no clone required)
 ```bash
-curl -O https://raw.githubusercontent.com/ramleo/buils_bootstrap/main/bootstrap.py
+curl -O https://raw.githubusercontent.com/ramleo/builds_bootstrap/main/bootstrap.py
 python3 bootstrap.py
-cd buils_bootstrap
+cd builds_bootstrap
 ```
 
 ### 🐳 Via Docker (nothing to install except Docker)
 ```bash
-docker build -t buils_bootstrap -f Dockerfile.bootstrap .
-docker run --rm -v $(pwd):/output buils_bootstrap
-cd buils_bootstrap
+docker build -t builds_bootstrap -f Dockerfile.bootstrap .
+docker run --rm -v $(pwd):/output builds_bootstrap
+cd builds_bootstrap
 ```
 
 ### 📦 Git Clone
 ```bash
-git clone https://github.com/ramleo/buils_bootstrap
-cd buils_bootstrap
+git clone https://github.com/ramleo/builds_bootstrap
+cd builds_bootstrap
 ```
 
 ---

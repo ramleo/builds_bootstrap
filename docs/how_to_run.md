@@ -30,7 +30,7 @@ If you get `command not found`, install Python 3.9+ from [python.org](https://py
 ## Step 2 — Download the bootstrap script
 
 ```bash
-curl -O https://raw.githubusercontent.com/ramleo/buils_bootstrap/main/bootstrap.py
+curl -O https://raw.githubusercontent.com/ramleo/builds_bootstrap/main/bootstrap.py
 ```
 
 This downloads a single installer file — no git, no GitHub account required.
@@ -52,7 +52,7 @@ This will:
 ## Step 4 — Enter the template folder
 
 ```bash
-cd buils_bootstrap
+cd builds_bootstrap
 ```
 
 ---
@@ -176,12 +176,12 @@ titanic-predictor_20260524_143000/
 ## Alternative: get the template via Docker
 
 ```bash
-docker build -t buils_bootstrap -f Dockerfile.bootstrap \
-  https://raw.githubusercontent.com/ramleo/buils_bootstrap/main/Dockerfile.bootstrap
+docker build -t builds_bootstrap -f Dockerfile.bootstrap \
+  https://raw.githubusercontent.com/ramleo/builds_bootstrap/main/Dockerfile.bootstrap
 
-docker run --rm -v $(pwd):/output buils_bootstrap
+docker run --rm -v $(pwd):/output builds_bootstrap
 
-cd buils_bootstrap
+cd builds_bootstrap
 ./start.sh
 ```
 
@@ -190,8 +190,8 @@ cd buils_bootstrap
 ## Alternative: get the template via git clone
 
 ```bash
-git clone https://github.com/ramleo/buils_bootstrap
-cd buils_bootstrap
+git clone https://github.com/ramleo/builds_bootstrap
+cd builds_bootstrap
 ./start.sh
 ```
 
@@ -203,11 +203,11 @@ cd buils_bootstrap
 python3 --version          # 1. confirm Python is installed
 curl -O <bootstrap_url>    # 2. download installer
 python3 bootstrap.py       # 3. create template + auto-install tools
-cd buils_bootstrap         # 4. enter folder
+cd builds_bootstrap         # 4. enter folder
 ./start.sh                 # 5. answer prompts → project created → Claude launches
 ```
 
-*(Replace `<bootstrap_url>` with `https://raw.githubusercontent.com/ramleo/buils_bootstrap/main/bootstrap.py`)*
+*(Replace `<bootstrap_url>` with `https://raw.githubusercontent.com/ramleo/builds_bootstrap/main/bootstrap.py`)*
 
 ---
 
@@ -219,6 +219,6 @@ cd buils_bootstrap         # 4. enter folder
 | `claude: command not found` | Run `./start.sh` — it auto-installs, or manually: `npm install -g @anthropic-ai/claude-code` |
 | `Permission denied: ./start.sh` | Run `chmod +x start.sh` first |
 | Dataset not found | Copy your `.csv` into the project's `data/` folder, then tell Claude its name |
-| `buils_bootstrap/` already exists | Run `python3 bootstrap.py my-new-name` to use a different folder name |
+| `builds_bootstrap/` already exists | Run `python3 bootstrap.py my-new-name` to use a different folder name |
 | Homebrew install hangs | Accept the Xcode Command Line Tools prompt that appears |
 | pip install fails | Check Python version (`python3 --version`) — requires 3.9+ |
