@@ -836,16 +836,16 @@ ENV/
 .env
 *.env.*
 
-# Large model binaries (tracked via Git LFS if needed)
-# models/*.pkl   ← kept intentionally for reproducibility
-
 # Logs
 *.log
 logs/
 
-# ML template — per-run artifacts (not committed in template repo)
+# ML artifacts — exclude raw split files but KEEP final pipeline for deployment
+# final_pipeline.pkl and label_encoder.pkl must be committed so Render can load them
 data/*.csv
-models/*.pkl
+models/X_train_raw.pkl
+models/X_test_raw.pkl
+models/preprocessor.pkl
 models/*.npy
 plots/*.png
 
