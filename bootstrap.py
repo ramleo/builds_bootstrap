@@ -391,8 +391,9 @@ For Steps 13–14 (Render & generic cloud) see @deploy/cloud.md.
 **Trigger:** Steps 11–13 — Git, GitHub, Render deployment
 **Delegate when:** Running multi-step git workflows (init → commit → push) or setting up deployment configs.
 **Input to provide:** Project root path, GitHub username, repo name, visibility (public/private), Render service name.
-**Agent must:** Execute all git commands, create the GitHub repo, push the code, verify the remote is set; return ONLY the GitHub repo URL and confirmation.
-**Returns:** GitHub repo URL, commit hash, push confirmation, any errors.
+**Agent must:** Execute all git commands, create the GitHub repo, push the code, create `render.yaml`, push it, print manual Render dashboard instructions for the user; return ONLY the GitHub repo URL, confirmation, and the printed instructions.
+**Returns:** GitHub repo URL, commit hash, push confirmation, manual Render deploy steps printed for user, any errors.
+**NEVER use:** `render` CLI, `render login`, `render deploy`, Render API keys, or any automated Render deployment — Render requires a browser and must be completed manually by the user.
 
 ---
 
@@ -514,6 +515,14 @@ Imported by @deploy/cloud.md.
 ---
 
 ## Step 13 — Deploy on Render
+
+> ⚠️ **AGENT RULE — READ FIRST:**
+> - **DO NOT** use `render` CLI, `render login`, `render deploy`, or any Render CLI commands.
+> - **DO NOT** ask for a Render API key or attempt API-based deployment.
+> - **DO NOT** try to automate the Render dashboard — it requires a browser.
+> - Your job is: (1) create `render.yaml`, (2) push it to GitHub, (3) print the manual steps for the user.
+> - Stop after step 13e. The user will complete the browser steps themselves.
+
 Perform this step after the Dockerfile is pushed to GitHub (Step 12).
 
 ### 13a — Create `render.yaml`
@@ -531,23 +540,28 @@ services:
         value: "3.11.0"
 ```
 
-### 13b — Deploy Steps
-1. Go to [render.com](https://render.com) → sign up / log in with GitHub
-2. Click **New +** → **Web Service**
-3. Connect GitHub repo: `<username>/<project-name>`
-4. Render auto-detects `render.yaml` — confirm settings:
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
-   - **Instance Type:** Free
-5. Click **Create Web Service** — Render builds and deploys automatically
-6. Live URL: `https://<project-name>.onrender.com`
-
-### 13c — Verify Deployment
+### 13b — Push render.yaml to GitHub
 ```bash
-curl https://<project-name>.onrender.com/health
-curl -X POST https://<project-name>.onrender.com/predict \\
-  -H "Content-Type: application/json" \\
-  -d \'<replace with valid feature JSON from your dataset>\'
+git add render.yaml
+git commit -m "Add render.yaml for Render deployment"
+git push origin main
+```
+
+### 13c — Print manual deploy instructions for the user
+Print this message to the user **exactly** (replace `<username>` and `<project-name>` from `.ml_config.json`):
+
+```
+✅ render.yaml is ready and pushed to GitHub.
+
+To go live on Render (free, ~2 minutes):
+  1. Visit https://render.com → sign in with GitHub
+  2. Click New + → Web Service
+  3. Connect repo: <username>/<project-name>
+  4. Render auto-detects render.yaml → click Create Web Service
+  5. Your API will be live at: https://<project-name>.onrender.com
+
+Once live, test it:
+  curl https://<project-name>.onrender.com/health
 ```
 
 ### 13d — Create `deployment_guide.md`
@@ -562,10 +576,12 @@ Document the following in `docs/deployment_guide.md`:
 
 ### 13e — Push deployment guide to GitHub
 ```bash
-git add render.yaml docs/deployment_guide.md
-git commit -m "Add render.yaml and deployment guide"
+git add docs/deployment_guide.md
+git commit -m "Add deployment guide"
 git push origin main
 ```
+
+**Stop here.** The user will open their browser to complete the Render dashboard steps.
 '''
 
 # ════════════════════════════════════════════════════════════════════
