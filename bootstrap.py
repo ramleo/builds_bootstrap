@@ -1454,6 +1454,7 @@ import shutil as _shutil
 import subprocess
 import sys
 import warnings
+from datetime import datetime
 from pathlib import Path
 
 warnings.filterwarnings("ignore")
@@ -1470,7 +1471,7 @@ X = "\033[0m"      # reset
 # Save ANSI codes under stable names — X is later overwritten by the feature
 # matrix (sklearn convention: X = df.drop(...)), so any code that runs AFTER
 # that point must use these aliases instead of the bare single-letter names.
-_G = G; _C = C; _B = B; _Y = Y; _R = R; _X = X
+_G = G; _C = C; _B = B; _Y = Y; _R = R; _M = M; _X = X
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1523,8 +1524,8 @@ if not CONFIG_PATH.exists():
     _err(f".ml_config.json not found at {CONFIG_PATH}")
     _info("Creating a minimal config — edit it and re-run.")
     # Ask for the minimum needed
-    dataset_input = input(f"  {B}Dataset CSV path (or filename inside data/): {X}").strip()
-    target_input = input(f"  {B}Target column name (press Enter to auto-detect): {X}").strip()
+    dataset_input = input(f"  {_B}Dataset CSV path (or filename inside data/): {_X}").strip()
+    target_input = input(f"  {_B}Target column name (press Enter to auto-detect): {_X}").strip()
     cfg = {
         "dataset_path": dataset_input,
         "target_column": target_input or None,
@@ -1623,11 +1624,11 @@ _ok(f"Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
 # ── Auto-detect target column ────────────────────────────────────────
 if target_col_cfg and target_col_cfg in df.columns:
     target_col = target_col_cfg
-    _ok(f"Target column (from config): {B}{target_col}{X}")
+    _ok(f"Target column (from config): {_B}{target_col}{_X}")
 else:
     # Heuristic: last column
     target_col = df.columns[-1]
-    _warn(f"Target column not specified; guessing last column: {B}{target_col}{X}")
+    _warn(f"Target column not specified; guessing last column: {_B}{target_col}{_X}")
 
 # ── Auto-detect task type ────────────────────────────────────────────
 n_unique = df[target_col].nunique()
@@ -1635,10 +1636,10 @@ if df[target_col].dtype in (object, bool, "bool") or n_unique <= 20:
     task_type = "classification"
 else:
     task_type = "regression"
-_ok(f"Task type: {B}{task_type}{X}  (unique target values: {n_unique})")
+_ok(f"Task type: {_B}{task_type}{_X}  (unique target values: {n_unique})")
 
 # ── Basic EDA printout ───────────────────────────────────────────────
-print(f"\n{B}Column dtypes:{X}")
+print(f"\n{_B}Column dtypes:{_X}")
 print(df.dtypes.to_string())
 
 missing = df.isnull().sum()
@@ -1646,17 +1647,17 @@ missing_pct = (missing / len(df) * 100).round(1)
 missing_df = pd.DataFrame({"missing": missing, "pct": missing_pct})
 missing_with = missing_df[missing_df["missing"] > 0]
 if not missing_with.empty:
-    print(f"\n{B}Missing values:{X}")
+    print(f"\n{_B}Missing values:{_X}")
     print(missing_with.to_string())
 else:
     _ok("No missing values")
 
 if task_type == "classification":
-    print(f"\n{B}Class balance ({target_col}):{X}")
+    print(f"\n{_B}Class balance ({target_col}):{_X}")
     vc = df[target_col].value_counts()
     print(vc.to_string())
 else:
-    print(f"\n{B}Target distribution ({target_col}):{X}")
+    print(f"\n{_B}Target distribution ({target_col}):{_X}")
     print(df[target_col].describe().to_string())
 
 # ── EDA plots ────────────────────────────────────────────────────────
@@ -1908,7 +1909,6 @@ if label_encoder is not None:
 
 _print_header("Step 7 — Writing Summary Report")
 
-from datetime import datetime
 
 now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -2096,29 +2096,69 @@ def _get_features(pipeline):
 
 def _generate_app(root, task_type, num_feats, cat_feats):
     """Write a working FastAPI app.py based on the fitted pipeline."""
+    import re as _re
     _print_header("Step 8 — Generating FastAPI app.py")
+
+    # Sanitize feature names: CSV columns may contain spaces or special chars
+    # that are invalid as Python identifiers. Map safe_name -> original_name.
+    def _safe(name):
+        s = _re.sub(r'[^a-zA-Z0-9_]', '_', name)
+        return ('f_' + s) if s[0].isdigit() else s
+
+    num_fields = [(_safe(f), f) for f in num_feats]
+    cat_fields = [(_safe(f), f) for f in cat_feats]
+    has_aliases = any(s != o for s, o in num_fields + cat_fields)
+
     lines = [
         '#!/usr/bin/env python3',
         '"""Auto-generated FastAPI prediction API."""',
-        'from fastapi import FastAPI',
-        'from pydantic import BaseModel',
+        'import os',
+        'from pathlib import Path',
+        'from fastapi import FastAPI, HTTPException',
+        'from fastapi.responses import RedirectResponse',
+        'from pydantic import BaseModel, Field',
         'from typing import Optional, List',
         'import joblib, pandas as pd',
         '',
-        'from fastapi.responses import RedirectResponse',
+        '_BASE = Path(__file__).parent.resolve()',
         '',
         'app = FastAPI(title="ML Prediction API")',
-        'pipeline = joblib.load("models/final_pipeline.pkl")',
+        '',
+        'try:',
+        '    pipeline = joblib.load(_BASE / "models" / "final_pipeline.pkl")',
+        'except FileNotFoundError:',
+        '    raise RuntimeError("models/final_pipeline.pkl not found. Train the pipeline first.")',
     ]
     if task_type == "classification":
-        lines.append('label_encoder = joblib.load("models/label_encoder.pkl")')
+        lines += [
+            'try:',
+            '    label_encoder = joblib.load(_BASE / "models" / "label_encoder.pkl")',
+            'except FileNotFoundError:',
+            '    raise RuntimeError("models/label_encoder.pkl not found.")',
+        ]
+
+    # Build Pydantic model — use Field(alias=) when name was sanitized
     lines += ['', 'class InputData(BaseModel):']
-    for feat in num_feats:
-        lines.append('    ' + feat + ': Optional[float] = None')
-    for feat in cat_feats:
-        lines.append('    ' + feat + ': Optional[str] = None')
-    if not num_feats and not cat_feats:
+    if has_aliases:
+        lines.append('    model_config = {"populate_by_name": True}')
+    for safe, orig in num_fields:
+        if safe == orig:
+            lines.append(f'    {safe}: Optional[float] = None')
+        else:
+            lines.append(f'    {safe}: Optional[float] = Field(None, alias="{orig}")')
+    for safe, orig in cat_fields:
+        if safe == orig:
+            lines.append(f'    {safe}: Optional[str] = None')
+        else:
+            lines.append(f'    {safe}: Optional[str] = Field(None, alias="{orig}")')
+    if not num_fields and not cat_fields:
         lines.append('    pass')
+
+    # Build DataFrame using safe field names mapped back to original column names
+    all_fields = num_fields + cat_fields
+    row_dict = '{' + ', '.join(f'"{orig}": data.{safe}' for safe, orig in all_fields) + '}'
+    batch_row_dict = '{' + ', '.join(f'"{orig}": d.{safe}' for safe, orig in all_fields) + '}'
+
     lines += [
         '',
         '@app.get("/", include_in_schema=False)',
@@ -2131,7 +2171,7 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         '',
         '@app.post("/predict")',
         'def predict(data: InputData):',
-        '    df = pd.DataFrame([data.dict()])',
+        f'    df = pd.DataFrame([{row_dict}])',
         '    pred = pipeline.predict(df)[0]',
     ]
     if task_type == "classification":
@@ -2146,7 +2186,7 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         '',
         '@app.post("/predict/batch")',
         'def predict_batch(data: List[InputData]):',
-        '    df = pd.DataFrame([d.dict() for d in data])',
+        f'    df = pd.DataFrame([{batch_row_dict} for d in data])',
         '    preds = pipeline.predict(df)',
     ]
     if task_type == "classification":
@@ -2183,6 +2223,7 @@ def _generate_docker(root):
         "COPY --from=builder /install /usr/local",
         "COPY app.py .",
         "COPY models/ models/",
+        *( ["COPY src/ src/"] if (root / "src").exists() else [] ),
         "RUN useradd -m appuser && chown -R appuser /app",
         "USER appuser",
         "EXPOSE 8000",
@@ -2222,6 +2263,12 @@ def _push_github(root, cfg):
         _err("Not logged into GitHub CLI.  Run: gh auth login")
         return False
 
+    # Force-add deployment-critical model files regardless of .gitignore
+    for model_file in ["models/final_pipeline.pkl", "models/label_encoder.pkl"]:
+        if (root / model_file).exists():
+            subprocess.run(["git", "add", "-f", model_file],
+                           cwd=str(root), capture_output=True)
+
     for cmd in [["git", "init"], ["git", "add", "."],
                 ["git", "commit", "-m", "Initial commit: auto ML pipeline with FastAPI"]]:
         r = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True)
@@ -2235,10 +2282,13 @@ def _push_github(root, cfg):
         cwd=str(root), capture_output=True, text=True,
     )
     if r.returncode != 0:
-        if "already exists" in r.stderr:
+        if "already exists" in r.stderr.lower() or "already exists" in r.stdout.lower():
             _warn("Repo already exists — pushing to existing remote...")
-            subprocess.run(["git", "push", "-u", "origin", "main"],
-                           cwd=str(root), capture_output=True)
+            rp = subprocess.run(["git", "push", "-u", "origin", "HEAD"],
+                                cwd=str(root), capture_output=True, text=True)
+            if rp.returncode != 0:
+                _err("Push to existing repo failed: " + rp.stderr.strip())
+                return False
         else:
             _err("GitHub push failed: " + r.stderr.strip())
             return False
@@ -2257,7 +2307,7 @@ def _deploy_render(root, cfg):
     render_lines = [
         "services:",
         "  - type: web",
-        "    name: " + proj,
+        "    name: " + proj.lower(),   # Render requires lowercase
         "    runtime: python",
         "    buildCommand: pip install -r requirements.txt",
         "    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT",
@@ -2270,10 +2320,15 @@ def _deploy_render(root, cfg):
     _ok("render.yaml created")
 
     subprocess.run(["git", "add", "render.yaml"], cwd=str(root), capture_output=True)
-    subprocess.run(["git", "commit", "-m", "Add render.yaml for Render deployment"],
-                   cwd=str(root), capture_output=True)
-    subprocess.run(["git", "push", "origin", "main"], cwd=str(root), capture_output=True)
-    _ok("render.yaml pushed to GitHub")
+    rc = subprocess.run(["git", "commit", "-m", "Add render.yaml for Render deployment"],
+                        cwd=str(root), capture_output=True, text=True)
+    rp = subprocess.run(["git", "push", "origin", "HEAD"],
+                        cwd=str(root), capture_output=True, text=True)
+    if rp.returncode != 0:
+        _warn("render.yaml push failed: " + rp.stderr.strip())
+        _info("Manually run: git push origin HEAD")
+    else:
+        _ok("render.yaml pushed to GitHub")
 
     live = "https://" + proj.lower() + ".onrender.com"
     print("\n" + _B + "  Go live on Render (free, ~2 minutes):" + _X)
@@ -2308,6 +2363,14 @@ def _post_pipeline_menu(root, cfg, task_type, pipeline):
     do_app    = choice in ("1", "4")
     do_github = choice in ("2", "4")
     do_render = choice in ("3", "4")
+
+    # Render requires app.py and a GitHub push — enforce dependencies
+    if do_render and not do_github:
+        _warn("Render deploy requires GitHub push. Adding GitHub step automatically.")
+        do_github = True
+    if do_render and not do_app:
+        _warn("Render deploy requires app.py. Adding app generation step automatically.")
+        do_app = True
 
     if do_app:
         _generate_app(root, task_type, num_feats, cat_feats)
