@@ -48,6 +48,9 @@ def collect_inputs():
         else:
             print(f"  {Y}⚠ File not found — copy to data/ later.{X}")
 
+    target_column = _prompt("Target column name (press Enter to auto-detect)", "")
+    target_column = target_column or "auto-detect"
+
     deploy_choice = _menu("Deployment platform:", [
         ("1", "Ask me later"),
         ("2", "Render        (free tier, recommended)"),
@@ -90,7 +93,7 @@ def collect_inputs():
 
     return dict(
         project_name=project_name, dataset_path=dataset_path,
-        dataset_filename=dataset_filename, platform=platform,
+        dataset_filename=dataset_filename, target_column=target_column, platform=platform,
         github_username=gh_user, github_repo=gh_repo, github_visibility=gh_vis,
     )
 
@@ -101,7 +104,7 @@ def write_config(cfg, dest):
         "project_name":        cfg["project_name"],
         "dataset_filename":    cfg["dataset_filename"] or "<not provided yet>",
         "dataset_path":        f"data/{cfg['dataset_filename']}" if cfg["dataset_filename"] else "<not provided yet>",
-        "target_column":       "auto-detect",
+        "target_column":       cfg.get("target_column", "auto-detect"),
         "task_type":           "auto-detect",
         "deployment_platform": cfg["platform"],
         "github_username":     u,
@@ -964,6 +967,10 @@ if [ -n "$DATASET_PATH" ]; then
 fi
 
 echo ""
+read -rp "Target column name (press Enter to auto-detect): " TARGET_COLUMN
+TARGET_COLUMN="${TARGET_COLUMN:-auto-detect}"
+
+echo ""
 echo -e "${BOLD}Deployment platform:${RESET}"
 echo "  1) Ask me later  2) Render  3) Fly.io  4) Railway"
 echo "  5) AWS App Runner  6) GCP Cloud Run  7) Azure  8) Skip"
@@ -1038,7 +1045,7 @@ cat > "$STAGING_DIR/.ml_config.json" << CONFIGEOF
   "project_name": "${PROJECT_NAME}",
   "dataset_filename": "${DATASET_FILENAME_SAFE}",
   "dataset_path": "data/${DATASET_FILENAME_SAFE}",
-  "target_column": "auto-detect",
+  "target_column": "${TARGET_COLUMN}",
   "task_type": "auto-detect",
   "deployment_platform": "${PLATFORM}",
   "github_username": "${GH_USER}",
@@ -1141,6 +1148,8 @@ def collect_inputs():
             print(f"  {G}✔ Found: {dataset_filename}{X}")
         else:
             print(f"  {Y}⚠ File not found — copy to data/ later.{X}")
+    target_column = prompt("Target column name (press Enter to auto-detect)", "")
+    target_column = target_column or "auto-detect"
     deploy_choice = menu("Deployment platform:", [
         ("1","Ask me later"),("2","Render (free tier, recommended)"),
         ("3","Fly.io"),("4","Railway"),("5","AWS App Runner"),
@@ -1165,9 +1174,9 @@ def collect_inputs():
     else:
         print(f"  {Y}⚠ No GitHub username — skipping.{X}")
     return {"project_name": project_name, "dataset_path": dataset_path,
-            "dataset_filename": dataset_filename, "platform": platform,
-            "github_username": gh_user, "github_repo": gh_repo or project_name,
-            "github_visibility": gh_vis}
+            "dataset_filename": dataset_filename, "target_column": target_column,
+            "platform": platform, "github_username": gh_user,
+            "github_repo": gh_repo or project_name, "github_visibility": gh_vis}
 
 def _make_staging_dir(project_dir):
     staging = project_dir.parent / f".ml_staging_{project_dir.name}"
@@ -1212,7 +1221,7 @@ def write_config(cfg, staging_dir):
     config = {"project_name": cfg["project_name"],
               "dataset_filename": cfg["dataset_filename"] or "<not provided yet>",
               "dataset_path": ("data/" + cfg["dataset_filename"]) if cfg["dataset_filename"] else "<not provided yet>",
-              "target_column": "auto-detect", "task_type": "auto-detect",
+              "target_column": cfg.get("target_column", "auto-detect"), "task_type": "auto-detect",
               "deployment_platform": cfg["platform"], "github_username": gh_user,
               "github_repo": gh_repo, "github_visibility": cfg["github_visibility"],
               "github_url": f"https://github.com/{gh_user}/{gh_repo}" if gh_user else "",

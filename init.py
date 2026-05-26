@@ -80,6 +80,9 @@ def collect_inputs() -> dict:
         else:
             print(f"  {Y}⚠ File not found — you can copy it to data/ later.{X}")
 
+    target_column = prompt("Target column name (press Enter to auto-detect)", "")
+    target_column = target_column or "auto-detect"
+
     # Deployment
     deploy_choice = menu(
         "Deployment platform (applied at end of pipeline):",
@@ -134,6 +137,7 @@ def collect_inputs() -> dict:
         "project_name":      project_name,
         "dataset_path":      dataset_path,
         "dataset_filename":  dataset_filename,
+        "target_column":     target_column,
         "platform":          platform,
         "github_username":   gh_user,
         "github_repo":       gh_repo or project_name,
@@ -244,7 +248,7 @@ def write_config(cfg: dict, staging_dir: Path):
         "project_name":      cfg["project_name"],
         "dataset_filename":  cfg["dataset_filename"] or "<not provided yet>",
         "dataset_path":      f"data/{cfg['dataset_filename']}" if cfg["dataset_filename"] else "<not provided yet>",
-        "target_column":     "auto-detect",
+        "target_column":     cfg.get("target_column", "auto-detect"),
         "task_type":         "auto-detect",
         "deployment_platform": cfg["platform"],
         "github_username":   gh_user,

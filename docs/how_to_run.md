@@ -57,6 +57,7 @@ This will:
 |---|---|
 | Project name | `titanic-predictor` |
 | Dataset CSV path | `/Users/yourname/Downloads/titanic.csv` |
+| Target column name | `Survived` (press Enter to auto-detect) |
 | Deployment platform | `2` for Render, or `1` to decide later |
 | GitHub username | `your-github-username` (press Enter to skip) |
 | GitHub repo name | `titanic-predictor` (defaults to project name) |

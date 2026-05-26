@@ -100,6 +100,10 @@ if [ -n "$DATASET_PATH" ]; then
 fi
 
 echo ""
+read -rp "Target column name (press Enter to auto-detect): " TARGET_COLUMN
+TARGET_COLUMN="${TARGET_COLUMN:-auto-detect}"
+
+echo ""
 echo -e "${BOLD}Deployment platform (applied at end of pipeline):${RESET}"
 echo "  1) Ask me later"
 echo "  2) Render        (free tier, recommended)"
@@ -216,7 +220,7 @@ cat > "$STAGING_DIR/.ml_config.json" << CONFIGEOF
   "project_name": "${PROJECT_NAME}",
   "dataset_filename": "${DATASET_FILENAME_SAFE}",
   "dataset_path": "data/${DATASET_FILENAME_SAFE}",
-  "target_column": "auto-detect",
+  "target_column": "${TARGET_COLUMN}",
   "task_type": "auto-detect",
   "deployment_platform": "${PLATFORM}",
   "github_username": "${GH_USER}",
