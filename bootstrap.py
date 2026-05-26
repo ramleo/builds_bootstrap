@@ -48,9 +48,6 @@ def collect_inputs():
         else:
             print(f"  {Y}⚠ File not found — copy to data/ later.{X}")
 
-    target_column = _prompt("Target column name (press Enter to auto-detect)", "")
-    target_column = target_column or "auto-detect"
-
     deploy_choice = _menu("Deployment platform:", [
         ("1", "Ask me later"),
         ("2", "Render        (free tier, recommended)"),
@@ -93,7 +90,7 @@ def collect_inputs():
 
     return dict(
         project_name=project_name, dataset_path=dataset_path,
-        dataset_filename=dataset_filename, target_column=target_column, platform=platform,
+        dataset_filename=dataset_filename, platform=platform,
         github_username=gh_user, github_repo=gh_repo, github_visibility=gh_vis,
     )
 
@@ -104,7 +101,7 @@ def write_config(cfg, dest):
         "project_name":        cfg["project_name"],
         "dataset_filename":    cfg["dataset_filename"] or "<not provided yet>",
         "dataset_path":        f"data/{cfg['dataset_filename']}" if cfg["dataset_filename"] else "<not provided yet>",
-        "target_column":       cfg.get("target_column", "auto-detect"),
+        "target_column":       "auto-detect",
         "task_type":           "auto-detect",
         "deployment_platform": cfg["platform"],
         "github_username":     u,
@@ -321,7 +318,8 @@ Also read `src/preprocess.py` to identify any feature engineering done **before*
 - Replicate all pre-pipeline feature engineering (e.g. extract `Title` from `Name`) inside `app.py` before calling predict
 - Make columns that the pipeline can impute (Age, Fare, etc.) `Optional` with `None` default
 - Use `predict_proba` for probability output (SVC must be trained with `probability=True`)
-- Endpoints: `GET /health`, `POST /predict`, `POST /predict/batch`
+- Endpoints: `GET /` (redirect to `/docs`), `GET /health`, `POST /predict`, `POST /predict/batch`
+- For `GET /`: `from fastapi.responses import RedirectResponse` and return `RedirectResponse(url="/docs")` with `include_in_schema=False`
 - Write the **complete, final `app.py` in ONE pass** — do not write a partial version and patch it later
 
 **Agent must:** Inspect the pipeline first, write the complete `app.py`, start the server, smoke-test all endpoints via curl, return ONLY confirmation + curl responses.
@@ -527,6 +525,7 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
@@ -967,10 +966,6 @@ if [ -n "$DATASET_PATH" ]; then
 fi
 
 echo ""
-read -rp "Target column name (press Enter to auto-detect): " TARGET_COLUMN
-TARGET_COLUMN="${TARGET_COLUMN:-auto-detect}"
-
-echo ""
 echo -e "${BOLD}Deployment platform:${RESET}"
 echo "  1) Ask me later  2) Render  3) Fly.io  4) Railway"
 echo "  5) AWS App Runner  6) GCP Cloud Run  7) Azure  8) Skip"
@@ -1045,7 +1040,7 @@ cat > "$STAGING_DIR/.ml_config.json" << CONFIGEOF
   "project_name": "${PROJECT_NAME}",
   "dataset_filename": "${DATASET_FILENAME_SAFE}",
   "dataset_path": "data/${DATASET_FILENAME_SAFE}",
-  "target_column": "${TARGET_COLUMN}",
+  "target_column": "auto-detect",
   "task_type": "auto-detect",
   "deployment_platform": "${PLATFORM}",
   "github_username": "${GH_USER}",
@@ -1148,8 +1143,6 @@ def collect_inputs():
             print(f"  {G}✔ Found: {dataset_filename}{X}")
         else:
             print(f"  {Y}⚠ File not found — copy to data/ later.{X}")
-    target_column = prompt("Target column name (press Enter to auto-detect)", "")
-    target_column = target_column or "auto-detect"
     deploy_choice = menu("Deployment platform:", [
         ("1","Ask me later"),("2","Render (free tier, recommended)"),
         ("3","Fly.io"),("4","Railway"),("5","AWS App Runner"),
@@ -1174,9 +1167,9 @@ def collect_inputs():
     else:
         print(f"  {Y}⚠ No GitHub username — skipping.{X}")
     return {"project_name": project_name, "dataset_path": dataset_path,
-            "dataset_filename": dataset_filename, "target_column": target_column,
-            "platform": platform, "github_username": gh_user,
-            "github_repo": gh_repo or project_name, "github_visibility": gh_vis}
+            "dataset_filename": dataset_filename, "platform": platform,
+            "github_username": gh_user, "github_repo": gh_repo or project_name,
+            "github_visibility": gh_vis}
 
 def _make_staging_dir(project_dir):
     staging = project_dir.parent / f".ml_staging_{project_dir.name}"
@@ -1221,7 +1214,7 @@ def write_config(cfg, staging_dir):
     config = {"project_name": cfg["project_name"],
               "dataset_filename": cfg["dataset_filename"] or "<not provided yet>",
               "dataset_path": ("data/" + cfg["dataset_filename"]) if cfg["dataset_filename"] else "<not provided yet>",
-              "target_column": cfg.get("target_column", "auto-detect"), "task_type": "auto-detect",
+              "target_column": "auto-detect", "task_type": "auto-detect",
               "deployment_platform": cfg["platform"], "github_username": gh_user,
               "github_repo": gh_repo, "github_visibility": cfg["github_visibility"],
               "github_url": f"https://github.com/{gh_user}/{gh_repo}" if gh_user else "",
@@ -2102,6 +2095,8 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         'from typing import Optional, List',
         'import joblib, pandas as pd',
         '',
+        'from fastapi.responses import RedirectResponse',
+        '',
         'app = FastAPI(title="ML Prediction API")',
         'pipeline = joblib.load("models/final_pipeline.pkl")',
     ]
@@ -2115,6 +2110,10 @@ def _generate_app(root, task_type, num_feats, cat_feats):
     if not num_feats and not cat_feats:
         lines.append('    pass')
     lines += [
+        '',
+        '@app.get("/", include_in_schema=False)',
+        'def root():',
+        '    return RedirectResponse(url="/docs")',
         '',
         '@app.get("/health")',
         'def health():',
@@ -2252,6 +2251,7 @@ def _deploy_render(root, cfg):
         "    runtime: python",
         "    buildCommand: pip install -r requirements.txt",
         "    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT",
+        "    healthCheckPath: /health",
         "    envVars:",
         '      - key: PYTHON_VERSION',
         '        value: "3.11.0"',
