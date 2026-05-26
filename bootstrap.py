@@ -1492,25 +1492,25 @@ for d in (DATA_DIR, MODELS_DIR, PLOTS_DIR, DOCS_DIR):
 
 def _print_header(text: str) -> None:
     width = 60
-    print(f"\n{C}{B}{'═' * width}{X}")
-    print(f"{C}{B}  {text}{X}")
-    print(f"{C}{B}{'═' * width}{X}")
+    print(f"\n{_C}{_B}{'═' * width}{_X}")
+    print(f"{_C}{_B}  {text}{_X}")
+    print(f"{_C}{_B}{'═' * width}{_X}")
 
 
 def _ok(msg: str) -> None:
-    print(f"  {G}✔  {msg}{X}")
+    print(f"  {_G}✔  {msg}{_X}")
 
 
 def _warn(msg: str) -> None:
-    print(f"  {Y}⚠  {msg}{X}")
+    print(f"  {_Y}⚠  {msg}{_X}")
 
 
 def _err(msg: str) -> None:
-    print(f"  {R}✗  {msg}{X}")
+    print(f"  {_R}✗  {msg}{_X}")
 
 
 def _info(msg: str) -> None:
-    print(f"  {C}→  {msg}{X}")
+    print(f"  {_C}→  {msg}{_X}")
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1821,7 +1821,7 @@ results = []
 
 for name, estimator, param_grid in candidates:
     try:
-        _info(f"Training {B}{name}{X} with GridSearchCV(cv=3)...")
+        _info(f"Training {_B}{name}{_X} with GridSearchCV(cv=3)...")
         pipe = Pipeline([("preprocessor", ct), ("model", estimator)])
         gs = GridSearchCV(pipe, param_grid, cv=3, n_jobs=-1, scoring=scoring, refit=True)
         gs.fit(X_train, y_train)
@@ -1849,7 +1849,7 @@ best_params = best_result["best_params"]
 best_cv = best_result["cv_score"]
 
 _print_header("Step 5 — Best Model & Final Evaluation")
-print(f"\n  {G}{B}Best model: {best_name}{X}")
+print(f"\n  {_G}{_B}Best model: {best_name}{_X}")
 print(f"  CV {scoring}: {best_cv:.4f}")
 print(f"  Hyperparams: {best_params}")
 
@@ -1875,16 +1875,16 @@ if task_type == "classification":
     )
     metrics["accuracy"] = acc
     metrics["classification_report"] = report
-    print(f"\n  {B}Test Accuracy: {G}{acc:.4f}{X}")
-    print(f"\n{B}Classification Report:{X}")
+    print(f"\n  {_B}Test Accuracy: {_G}{acc:.4f}{_X}")
+    print(f"\n{_B}Classification Report:{_X}")
     print(report)
 else:
     rmse = float(np.sqrt(mean_squared_error(y_test, y_pred)))
     r2 = float(r2_score(y_test, y_pred))
     metrics["rmse"] = rmse
     metrics["r2"] = r2
-    print(f"\n  {B}Test RMSE : {G}{rmse:.4f}{X}")
-    print(f"  {B}Test R²   : {G}{r2:.4f}{X}")
+    print(f"\n  {_B}Test RMSE : {_G}{rmse:.4f}{_X}")
+    print(f"  {_B}Test R²   : {_G}{r2:.4f}{_X}")
 
 # ════════════════════════════════════════════════════════════════════
 # 6.  Save Artifacts
@@ -2054,26 +2054,26 @@ _ok(f"Summary report → {summary_path}")
 # ════════════════════════════════════════════════════════════════════
 
 print(f"""
-{C}{B}╔══════════════════════════════════════════════════════╗
+{_C}{_B}╔══════════════════════════════════════════════════════╗
 ║  ✅  Pipeline Complete!                              ║
-╠══════════════════════════════════════════════════════╣{X}
-{C}{B}║{X}  Dataset    : {csv_path.name} ({df.shape[0]:,} rows × {df.shape[1]} cols)
-{C}{B}║{X}  Task       : {task_type.title()}
-{C}{B}║{X}  Best Model : {best_name}
-{C}{B}║{X}  CV Score   : {best_cv:.4f}  ({scoring})""")
+╠══════════════════════════════════════════════════════╣{_X}
+{_C}{_B}║{_X}  Dataset    : {csv_path.name} ({df.shape[0]:,} rows × {df.shape[1]} cols)
+{_C}{_B}║{_X}  Task       : {task_type.title()}
+{_C}{_B}║{_X}  Best Model : {best_name}
+{_C}{_B}║{_X}  CV Score   : {best_cv:.4f}  ({scoring})""")
 
 if task_type == "classification":
-    print(f"{C}{B}║{X}  Accuracy   : {metrics['accuracy']:.4f}")
+    print(f"{_C}{_B}║{_X}  Accuracy   : {metrics['accuracy']:.4f}")
 else:
-    print(f"{C}{B}║{X}  RMSE       : {metrics['rmse']:.4f}")
-    print(f"{C}{B}║{X}  R²         : {metrics['r2']:.4f}")
+    print(f"{_C}{_B}║{_X}  RMSE       : {metrics['rmse']:.4f}")
+    print(f"{_C}{_B}║{_X}  R²         : {metrics['r2']:.4f}")
 
-print(f"""{C}{B}╠══════════════════════════════════════════════════════╣{X}
-{C}{B}║{X}  {G}models/final_pipeline.pkl{X}   ← ready to use
-{C}{B}║{X}  {G}docs/auto_summary.md{X}        ← full report
-{C}{B}║{X}  {G}plots/eda_correlation.png{X}   ← correlation heatmap
-{C}{B}║{X}  {G}plots/eda_target.png{X}        ← target distribution
-{C}{B}╚══════════════════════════════════════════════════════╝{X}
+print(f"""{_C}{_B}╠══════════════════════════════════════════════════════╣{_X}
+{_C}{_B}║{_X}  {_G}models/final_pipeline.pkl{_X}   ← ready to use
+{_C}{_B}║{_X}  {_G}docs/auto_summary.md{_X}        ← full report
+{_C}{_B}║{_X}  {_G}plots/eda_correlation.png{_X}   ← correlation heatmap
+{_C}{_B}║{_X}  {_G}plots/eda_target.png{_X}        ← target distribution
+{_C}{_B}╚══════════════════════════════════════════════════════╝{_X}
 """)
 
 # ════════════════════════════════════════════════════════════════════
@@ -2275,7 +2275,7 @@ def _deploy_render(root, cfg):
     subprocess.run(["git", "push", "origin", "main"], cwd=str(root), capture_output=True)
     _ok("render.yaml pushed to GitHub")
 
-    live = "https://" + proj + ".onrender.com"
+    live = "https://" + proj.lower() + ".onrender.com"
     print("\n" + _B + "  Go live on Render (free, ~2 minutes):" + _X)
     print("    1. Visit https://render.com → sign in with GitHub")
     print("    2. Click New + → Web Service")
