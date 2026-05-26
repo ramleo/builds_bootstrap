@@ -1055,21 +1055,19 @@ cat > "$STAGING_DIR/.ml_config.json" << CONFIGEOF
 CONFIGEOF
 echo -e "  ${GREEN}✔ Config ready${RESET}"
 
-echo -e "${GREEN}▶ Creating Python virtual environment (.venv)...${RESET}"
-python3 -m venv "$STAGING_DIR/.venv"
-echo -e "  ${GREEN}✔ Virtual environment created${RESET}"
-
-echo -e "${GREEN}▶ Installing dependencies (this may take a minute)...${RESET}"
-"$STAGING_DIR/.venv/bin/pip" install --upgrade pip -q
-"$STAGING_DIR/.venv/bin/pip" install -r "$STAGING_DIR/requirements.txt" -q
-echo -e "  ${GREEN}✔ Dependencies installed${RESET}"
-
 echo -e "${GREEN}▶ Creating project at: $PROJECT_DIR${RESET}"
 mv "$STAGING_DIR" "$PROJECT_DIR"
 STAGING_DIR_SET=false
 
-python3 -m venv --upgrade "$PROJECT_DIR/.venv" 2>/dev/null || \
-    "$PROJECT_DIR/.venv/bin/python" -m pip install pip -q 2>/dev/null || true
+echo -e "${GREEN}▶ Creating Python virtual environment (.venv)...${RESET}"
+rm -rf "$PROJECT_DIR/.venv"
+python3 -m venv "$PROJECT_DIR/.venv"
+echo -e "  ${GREEN}✔ Virtual environment created${RESET}"
+
+echo -e "${GREEN}▶ Installing dependencies (this may take a minute)...${RESET}"
+"$PROJECT_DIR/.venv/bin/pip" install --upgrade pip -q
+"$PROJECT_DIR/.venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt" -q
+echo -e "  ${GREEN}✔ Dependencies installed${RESET}"
 
 echo ""
 echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
@@ -1227,11 +1225,6 @@ def write_config(cfg, staging_dir):
 def move_to_final(staging_dir, project_dir):
     print(f"\n{G}▶ Creating project at: {project_dir}{X}")
     shutil.move(str(staging_dir), str(project_dir))
-    venv = project_dir / ".venv"
-    try:
-        subprocess.run([sys.executable,"-m","venv","--upgrade",str(venv)],check=True,capture_output=True)
-    except Exception:
-        subprocess.run([str(venv/"bin"/"python"),"-m","pip","install","pip","-q"],check=False,capture_output=True)
 
 def show_summary(cfg, project_dir):
     fn = cfg["dataset_filename"] or "<not provided yet>"
@@ -1261,16 +1254,17 @@ if __name__ == "__main__":
     copy_template(Path(__file__).parent.resolve(), staging_dir)
     copy_dataset(cfg, staging_dir)
     write_config(cfg, staging_dir)
+    move_to_final(staging_dir, project_dir)
     print(f"{G}▶ Creating Python virtual environment (.venv)...{X}")
-    subprocess.run([sys.executable,"-m","venv",str(staging_dir/".venv")],check=True)
+    shutil.rmtree(str(project_dir/".venv"), ignore_errors=True)
+    subprocess.run([sys.executable,"-m","venv",str(project_dir/".venv")],check=True)
     print(f"  {G}✔ Virtual environment created{X}")
     print(f"{G}▶ Installing dependencies (this may take a minute)...{X}")
-    pip = str(staging_dir/".venv"/"bin"/"pip")
+    pip = str(project_dir/".venv"/"bin"/"pip")
     subprocess.run([pip,"install","--upgrade","pip","-q"],check=True)
-    req = staging_dir/"requirements.txt"
+    req = project_dir/"requirements.txt"
     if req.exists(): subprocess.run([pip,"install","-r",str(req),"-q"],check=True)
     print(f"  {G}✔ Dependencies installed{X}")
-    move_to_final(staging_dir, project_dir)
     show_summary(cfg, project_dir)
     maybe_open_claude(project_dir)
 '''
@@ -2405,34 +2399,23 @@ if cfg["dataset_path"] and Path(cfg["dataset_path"]).is_file():
 
 write_config(cfg, staging_dir)
 
-# .venv + deps
-print(f"\n{G}▶ Creating Python virtual environment (.venv)...{X}")
-subprocess.run([sys.executable, "-m", "venv", str(staging_dir / ".venv")], check=True)
-print(f"  {G}✔ Virtual environment created{X}")
-
-print(f"{G}▶ Installing dependencies (this may take a minute)...{X}")
-_pip = str(staging_dir / ".venv" / "bin" / "pip")
-subprocess.run([_pip, "install", "--upgrade", "pip", "-q"], check=True)
-_req = staging_dir / "requirements.txt"
-if _req.exists():
-    subprocess.run([_pip, "install", "-r", str(_req), "-q"], check=True)
-print(f"  {G}✔ Dependencies installed{X}")
-
 # Atomic move → VS Code sees project appear once, fully complete
 print(f"\n{G}▶ Creating project at: {project_dir}{X}")
 shutil.move(str(staging_dir), str(project_dir))
 
-# Fix .venv shebangs after path changed
-try:
-    subprocess.run([sys.executable, "-m", "venv", "--upgrade", str(project_dir / ".venv")],
-                   check=True, capture_output=True)
-except Exception:
-    try:
-        subprocess.run([str(project_dir / ".venv" / "bin" / "python"),
-                        "-m", "pip", "install", "pip", "-q"],
-                       check=False, capture_output=True)
-    except Exception:
-        pass
+# Create fresh .venv at the final path (never move a venv — paths get baked in)
+print(f"\n{G}▶ Creating Python virtual environment (.venv)...{X}")
+shutil.rmtree(str(project_dir / ".venv"), ignore_errors=True)
+subprocess.run([sys.executable, "-m", "venv", str(project_dir / ".venv")], check=True)
+print(f"  {G}✔ Virtual environment created{X}")
+
+print(f"{G}▶ Installing dependencies (this may take a minute)...{X}")
+_pip = str(project_dir / ".venv" / "bin" / "pip")
+subprocess.run([_pip, "install", "--upgrade", "pip", "-q"], check=True)
+_req = project_dir / "requirements.txt"
+if _req.exists():
+    subprocess.run([_pip, "install", "-r", str(_req), "-q"], check=True)
+print(f"  {G}✔ Dependencies installed{X}")
 
 # Summary
 plat_labels = {
