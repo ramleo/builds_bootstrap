@@ -44,43 +44,14 @@ python3 bootstrap.py
 ```
 
 This will:
-- Create a project folder with all template files
 - Auto-install **Homebrew**, **Node.js**, and **Claude Code CLI** if they're missing
+- Ask you a few setup prompts (project name, CSV path, platform, GitHub)
+- Create a timestamped project folder (e.g. `my-project_20260526_143000/`)
+- Set up a Python virtual environment (`.venv/`) with all dependencies installed
 
 ---
 
-## Step 4 — Enter the template folder
-
-```bash
-cd builds_bootstrap
-```
-
----
-
-## Step 5 — Start the wizard
-
-```bash
-./start.sh
-```
-
-The script checks prerequisites (installs anything still missing), then shows a menu:
-
-```
-How would you like to run this template?
-  1) Shell script  — guided prompts here in the terminal
-  2) Python CLI    — richer prompts via init.py
-  3) Claude Code   — AI-driven, fully automated (recommended)
-```
-
-All three options do the same thing — they collect your project details, create a new project folder, set up the Python environment, and launch Claude Code automatically. The only difference is the style of prompts (shell, Python, or Claude's conversation interface).
-
-Choose **3** (or press Enter — it is the default).
-
----
-
-## Step 6 — Answer the setup prompts
-
-After choosing an option, you will be asked in the **terminal** (before Claude launches):
+## Step 4 — Answer the setup prompts
 
 | Prompt | Example answer |
 |---|---|
@@ -91,48 +62,24 @@ After choosing an option, you will be asked in the **terminal** (before Claude l
 | GitHub repo name | `titanic-predictor` (defaults to project name) |
 | Repo visibility | `1` for Public, `2` for Private |
 
-### When to add your CSV file
-
-**You do not need to move your CSV anywhere beforehand.** Just have it somewhere on your computer and know its full path.
-
-Type the full path when the terminal asks — the script copies it into the project's `data/` folder automatically.
-
-| Situation | What to do |
-|---|---|
-| File is anywhere on your computer | Type its full path, e.g. `/Users/yourname/Downloads/mydata.csv` |
-| File is not ready yet | Press Enter to skip — drop the CSV into `data/` later and tell Claude the filename |
+**You do not need to move your CSV beforehand.** Type its full path — the script copies it into `data/` automatically. Press Enter to skip and add it later.
 
 ---
 
-## Step 7 — Project is created automatically
+## Step 5 — Choose how to run the pipeline
 
-After you answer the prompts, the script:
-
-1. Creates a new project folder (e.g. `../titanic-predictor_20260524_143000/`)
-2. Copies all template files into it
-3. Copies your CSV into `data/`
-4. Writes `.ml_config.json` with all your choices
-5. Creates a Python virtual environment (`.venv/`)
-6. Installs all dependencies (`pip install -r requirements.txt`)
-7. Launches Claude Code automatically
-
----
-
-## Step 8 — Claude runs the pipeline
-
-Claude reads `.ml_config.json`, shows you a confirmation summary, and waits for your approval:
+After the project is created, a launch menu appears:
 
 ```
-Dataset   : data/titanic.csv
-Target    : Survived
-Task      : Classification
-Platform  : render
-GitHub    : https://github.com/yourname/titanic-predictor
-
-Proceed with the pipeline? [Y/n]
+How would you like to run the pipeline?
+  1) Claude Code   — AI-driven, fully automated (recommended)
+  2) Auto Pipeline — no Claude subscription needed (pure sklearn)
+  3) Manual        — I'll run it myself later
 ```
 
-Press **Enter** (or Y) and Claude works through the full checklist:
+### Option 1 — Claude Code (recommended)
+
+Launches `claude .` in your new project. Claude reads `.ml_config.json`, shows a confirmation summary, and runs the full 15-step pipeline automatically:
 
 | Step | Task | Output |
 |---|---|---|
@@ -149,31 +96,87 @@ Press **Enter** (or Y) and Claude works through the full checklist:
 | 12 | Dockerfile → build → smoke-test | Docker image |
 | 13 | Deploy to chosen cloud platform | live URL |
 
+Requires a Claude Code subscription. Claude shows a confirmation prompt before starting — press **Enter** (or Y) to proceed.
+
+### Option 2 — Auto Pipeline (no Claude subscription needed)
+
+Runs `auto_pipeline.py` — a pure-sklearn pipeline with zero AI dependency:
+
+1. Loads your CSV and auto-detects the task type (classification or regression)
+2. Profiles the data and saves EDA plots to `plots/`
+3. Builds a preprocessing pipeline (imputation, encoding, scaling)
+4. Runs GridSearchCV over 3 candidate models
+5. Evaluates the best model and saves `models/final_pipeline.pkl`
+6. Writes `docs/auto_summary.md` with full metrics and a reproducibility snippet
+
+After training completes, a **second menu** appears with deploy options:
+
+```
+What would you like to do next?
+  1) Generate FastAPI app + Dockerfile
+  2) Push to GitHub
+  3) Deploy to Render
+  4) All of the above  ← recommended
+  5) Done — I'll handle it myself
+```
+
+| Option | What it does |
+|---|---|
+| 1 | Writes `app.py` (FastAPI with `/health`, `/predict`, `/predict/batch`) and a multi-stage `Dockerfile` |
+| 2 | `git init` → commit → `gh repo create` → push to GitHub |
+| 3 | Writes `render.yaml` and prints the 5-step Render dashboard walkthrough |
+| 4 | All three steps in sequence — app, Docker, GitHub, then Render |
+| 5 | Exits; run any step manually later |
+
+> **Prerequisite for option 2/4:** `brew install gh && gh auth login` (GitHub CLI must be authenticated)
+
+### Option 3 — Manual
+
+Exits and prints the commands to run manually:
+
+```bash
+cd my-project_20260526_143000
+source .venv/bin/activate
+python auto_pipeline.py   # run the auto pipeline
+# or
+claude .                  # run the Claude Code pipeline
+```
+
 ---
 
 ## Folder layout after the pipeline
 
 ```
-titanic-predictor_20260524_143000/
+my-project_20260526_143000/
 ├── .venv/                  ← Python virtual environment (pre-installed)
 ├── .ml_config.json         ← your choices (dataset, platform, GitHub)
 ├── data/                   ← your CSV file
 ├── models/                 ← trained pipeline artifacts (.pkl)
 ├── plots/                  ← EDA charts (.png)
-├── src/preprocess.py       ← auto-generated preprocessing script
-├── tests/test_pipeline.py  ← auto-generated test suite
+├── src/preprocess.py       ← auto-generated preprocessing script (Claude option)
+├── tests/test_pipeline.py  ← auto-generated test suite (Claude option)
 ├── docs/                   ← summary, guides, test results
 ├── app.py                  ← FastAPI prediction API
 ├── Dockerfile              ← multi-stage container build
 ├── requirements.txt        ← pinned library versions
-└── render.yaml / fly.toml  ← deployment config
+└── render.yaml / fly.toml  ← deployment config (platform-specific)
 ```
-
-> The template folder is **never modified**. Each run produces a fresh, isolated project.
 
 ---
 
-## Alternative: get the template via Docker
+## Alternatives to bootstrap.py
+
+### Via git clone
+
+```bash
+git clone https://github.com/ramleo/builds_bootstrap
+cd builds_bootstrap
+./start.sh
+```
+
+`start.sh` shows the same 3-option setup menu and creates the project as a sibling folder of `builds_bootstrap/`.
+
+### Via Docker (nothing to install except Docker)
 
 ```bash
 docker build -t builds_bootstrap -f Dockerfile.bootstrap \
@@ -187,24 +190,40 @@ cd builds_bootstrap
 
 ---
 
-## Alternative: get the template via git clone
+## Running the End-to-End Test Suite
+
+`tests/run_e2e.py` validates the full flow from bootstrap to live API across 58 checks.
 
 ```bash
-git clone https://github.com/ramleo/builds_bootstrap
-cd builds_bootstrap
-./start.sh
+# Fast mode — skips Docker suite (~5 min)
+python3 tests/run_e2e.py --fast
+
+# Full run including Docker build (~10 min)
+python3 tests/run_e2e.py
+
+# Single suite only
+python3 tests/run_e2e.py --suite 1   # bootstrap & project creation
+python3 tests/run_e2e.py --suite 2   # pipeline artifacts
+python3 tests/run_e2e.py --suite 3   # app.py & Dockerfile content
+python3 tests/run_e2e.py --suite 4   # live API (uvicorn)
+python3 tests/run_e2e.py --suite 5   # Docker smoke tests
+
+# Test the published GitHub version
+python3 tests/run_e2e.py --from-github --fast
 ```
+
+The test suite also lives in its own repo: [github.com/ramleo/ml-pipeline-tests](https://github.com/ramleo/ml-pipeline-tests)
 
 ---
 
 ## Quick reference
 
 ```bash
-python3 --version          # 1. confirm Python is installed
-curl -O <bootstrap_url>    # 2. download installer
-python3 bootstrap.py       # 3. create template + auto-install tools
-cd builds_bootstrap         # 4. enter folder
-./start.sh                 # 5. answer prompts → project created → Claude launches
+python3 --version                        # confirm Python is installed
+curl -O <bootstrap_url>                  # download installer
+python3 bootstrap.py                     # answer prompts → project created
+#  → choose 2 (Auto Pipeline)
+#  → choose 4 (All of the above) after training
 ```
 
 *(Replace `<bootstrap_url>` with `https://raw.githubusercontent.com/ramleo/builds_bootstrap/main/bootstrap.py`)*
@@ -218,7 +237,9 @@ cd builds_bootstrap         # 4. enter folder
 | `python3: command not found` | Install Python 3.9+ from [python.org](https://python.org) |
 | `claude: command not found` | Run `./start.sh` — it auto-installs, or manually: `npm install -g @anthropic-ai/claude-code` |
 | `Permission denied: ./start.sh` | Run `chmod +x start.sh` first |
-| Dataset not found | Copy your `.csv` into the project's `data/` folder, then tell Claude its name |
-| `builds_bootstrap/` already exists | Run `python3 bootstrap.py my-new-name` to use a different folder name |
+| Dataset not found | Copy your `.csv` into the project's `data/` folder, then re-run `python auto_pipeline.py` |
+| GitHub push fails | Run `gh auth login` first, then choose option 2 from the deploy menu |
+| `builds_bootstrap/` already exists | Rename the existing folder before re-running `bootstrap.py` |
 | Homebrew install hangs | Accept the Xcode Command Line Tools prompt that appears |
 | pip install fails | Check Python version (`python3 --version`) — requires 3.9+ |
+| uvicorn: bad interpreter | Run `python3 -m venv --upgrade .venv` inside the project folder |

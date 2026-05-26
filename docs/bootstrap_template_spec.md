@@ -3704,12 +3704,151 @@ Regression:
 4. **DATA_DIR must be defined** — `DATA_DIR = ROOT / "data"` used for auto-discovery glob
 5. **Launch menu replaces direct claude launch** — the old `subprocess.run(["claude", "."])` becomes the 3-option menu at the end of bootstrap.py's main block
 
+### Post-Pipeline Deploy Functions
+
+After the ML training completes, `auto_pipeline.py` shows a second menu that lets users generate a FastAPI app, Dockerfile, push to GitHub, and deploy to Render — all without Claude. These functions are appended to the bottom of `auto_pipeline.py` and called as `_post_pipeline_menu(ROOT, cfg, task_type, final_pipe)`.
+
+#### ANSI Alias Fix (critical)
+
+`auto_pipeline.py` uses `X = "\033[0m"` for the ANSI reset colour, but sklearn's convention also uses `X = df.drop(...)` later in the script (DataFrame). To avoid the name clash, add stable aliases immediately after the ANSI colour definitions:
+
+```python
+G = "\033[0;32m"; C = "\033[0;36m"; B = "\033[1m"
+Y = "\033[1;33m"; R = "\033[0;31m"; X = "\033[0m"
+
+# Stable aliases — sklearn/pandas code later reuses single-letter variable names
+_G = G; _C = C; _B = B; _Y = Y; _R = R; _X = X
+```
+
+All post-pipeline functions must use `_G`, `_C`, `_B`, `_Y`, `_R`, `_X` instead of the single-letter names.
+
+#### `_get_features(pipeline)` → `(num_feats, cat_feats)`
+
+Introspects the fitted sklearn Pipeline to extract which feature names were passed to the numeric and categorical branches of the ColumnTransformer:
+
+```python
+def _get_features(pipeline):
+    ct = pipeline.named_steps["preprocessor"]
+    num_feats = list(ct.transformers_[0][2]) if ct.transformers_ else []
+    cat_feats = list(ct.transformers_[1][2]) if len(ct.transformers_) > 1 else []
+    return num_feats, cat_feats
+```
+
+#### `_generate_app(root, task_type, num_feats, cat_feats)` → writes `app.py`
+
+Generates a complete FastAPI app using string concatenation (NOT f-strings with dict keys — Python 3.9–3.11 forbid backslashes inside `{}` in f-strings). Key design points:
+
+- Imports: `fastapi`, `uvicorn`, `joblib`, `pandas`, `pydantic`
+- Loads `models/final_pipeline.pkl` and (for classification) `models/label_encoder.pkl` at startup
+- `InputData` Pydantic model with numeric fields as `Optional[float] = None` and categorical fields as `Optional[str] = None`
+- `GET /health` → `{"status": "ok", "model": "<best_model_name>"}`
+- `POST /predict` → `{"prediction": <label>, "probabilities": {class: prob, ...}}`
+- `POST /predict/batch` → `{"predictions": [...], "probabilities": [...]}`
+- For regression: returns `{"prediction": float}` without probabilities
+- Uses `pipeline.predict_proba` for classification (requires `probability=True` on SVC)
+
+#### `_generate_docker(root)` → writes `Dockerfile` and `.dockerignore`
+
+Generates a multi-stage Dockerfile:
+
+```dockerfile
+FROM python:3.11-slim AS builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
+
+FROM python:3.11-slim
+WORKDIR /app
+COPY --from=builder /install /usr/local
+COPY app.py .
+COPY models/ models/
+RUN useradd -m appuser && chown -R appuser /app
+USER appuser
+EXPOSE 8000
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+`.dockerignore` excludes: `.git/`, `__pycache__/`, `.venv/`, `data/`, `plots/`, `tests/`, `docs/`, `*.md`, `.env`, `.DS_Store`, `.claude/`
+
+#### `_push_github(root, cfg)` → git init + GitHub push
+
+Reads `github_username`, `github_repo`, `github_visibility` from the `cfg` dict (already loaded from `.ml_config.json`):
+
+```python
+def _push_github(root, cfg):
+    gh_user = cfg.get("github_username", "")
+    gh_repo = cfg.get("github_repo", "")
+    gh_vis  = cfg.get("github_visibility", "public")
+    if not gh_user or not gh_repo:
+        print("  No GitHub username/repo in config — skipping push")
+        return
+    cmds = [
+        ["git", "init"],
+        ["git", "add", "."],
+        ["git", "commit", "-m", "Initial commit: ML pipeline with FastAPI"],
+        ["gh", "repo", "create", gh_repo,
+         f"--{gh_vis}", "--source=.", "--remote=origin", "--push"],
+    ]
+    for cmd in cmds:
+        subprocess.run(cmd, cwd=root, check=True)
+```
+
+Requires the `gh` CLI to be installed and authenticated (`gh auth login`). If `github_username` is empty in `.ml_config.json`, the function prints a skip message and returns without error.
+
+#### `_deploy_render(root, cfg)` → writes `render.yaml` + prints walkthrough
+
+Writes `render.yaml` at the project root, commits it, pushes to GitHub, then prints the 5-step Render dashboard walkthrough:
+
+```yaml
+services:
+  - type: web
+    name: <project-name>
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+```
+
+#### `_post_pipeline_menu(root, cfg, task_type, pipeline)` → post-pipeline deploy menu
+
+Called immediately after `joblib.dump(final_pipe, pipeline_path)`. Uses `_C`, `_B`, `_X` aliases throughout. Key implementation details:
+
+```python
+def _post_pipeline_menu(root, cfg, task_type, pipeline):
+    print(f"\n{_B}What would you like to do next?{_X}")
+    print(f"  1) Generate FastAPI app + Dockerfile")
+    print(f"  2) Push to GitHub")
+    print(f"  3) Deploy to Render")
+    print(f"  4) All of the above  ← recommended")
+    print(f"  5) Done — I'll handle it myself")
+    try:
+        choice = input("Enter choice (default: 4): ").strip() or "4"
+    except EOFError:
+        choice = "4"   # non-interactive / piped input → default to "All"
+    ...
+```
+
+**The `try/except EOFError: choice = "4"` is mandatory.** When `bootstrap.py` launches `auto_pipeline.py` via `os.execv()`, stdin is inherited cleanly. But if the process is invoked with piped input (e.g. in tests), the stdin buffer may be exhausted by the time the post-pipeline menu runs — `EOFError` is the expected exception in that case, and defaulting to `"4"` (All of the above) gives the best test coverage.
+
+**`os.execv()` in bootstrap.py** — The launch of `auto_pipeline.py` from bootstrap's main block must use `os.execv()`, not `subprocess.run()`:
+
+```python
+# bootstrap.py — main block, option 2
+import os
+python = str(project_dir / ".venv" / "bin" / "python")
+os.execv(python, [python, "auto_pipeline.py"])
+```
+
+`os.execv()` replaces the bootstrap process entirely, so stdin is passed cleanly to `auto_pipeline.py`. Using `subprocess.run()` would buffer stdin at the parent level, causing the child's `input()` calls to receive EOF immediately.
+
 ### Manual Usage (Option 3 or later)
 
 ```bash
-cd my-project_20260525_143000
+cd my-project_20260526_143000
 source .venv/bin/activate
-python auto_pipeline.py         # run auto pipeline
+python auto_pipeline.py         # run auto pipeline (shows post-pipeline deploy menu)
 # or
 claude .                        # run Claude Code pipeline
 ```
@@ -3722,6 +3861,10 @@ claude .                        # run Claude Code pipeline
 | `auto_pipeline.py` in SKIP_IN_PROJECT | File not written to project | Remove from SKIP set — it belongs in projects |
 | No dataset in data/ | Script exits with confusing error | Clear message: "Copy your dataset into: {DATA_DIR}/" |
 | Embedding with regular string | Backslash errors in ANSI codes | Use `r'''...'''` raw string in FILES dict |
+| ANSI variable `X` overwritten by DataFrame | `TypeError` in post-pipeline functions when concatenating `X + string` | Add `_X = X` alias before any sklearn/pandas code |
+| `subprocess.run()` for auto_pipeline.py launch | Post-pipeline `input()` gets EOFError immediately | Use `os.execv()` — replaces process, stdin passes cleanly |
+| `input()` raises EOFError in piped/test mode | Post-pipeline menu crashes | Wrap in `try/except EOFError: choice = "4"` |
+| Backslash in f-string `{}` (Python ≤ 3.11) | `SyntaxError: f-string expression part cannot include a backslash` | Build string line by line with `+=` instead of f-string with dict-key access |
 
 ---
 
