@@ -1621,14 +1621,48 @@ except Exception as exc:
 
 _ok(f"Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
 
-# ── Auto-detect target column ────────────────────────────────────────
-if target_col_cfg and target_col_cfg in df.columns:
+# ── Resolve target column ────────────────────────────────────────────
+if target_col_cfg and target_col_cfg not in ("auto-detect", "") and target_col_cfg in df.columns:
     target_col = target_col_cfg
-    _ok(f"Target column (from config): {B}{target_col}{X}")
+    _ok(f"Target column (from config): {_B}{target_col}{_X}")
 else:
-    # Heuristic: last column
-    target_col = df.columns[-1]
-    _warn(f"Target column not specified; guessing last column: {B}{target_col}{X}")
+    # Ask the user — never silently guess on a real dataset
+    print(f"\n{_B}Available columns:{_X}")
+    for i, col in enumerate(df.columns, 1):
+        print(f"  {i:2}) {col}")
+    print()
+    while True:
+        try:
+            raw = input(f"Which column is the target variable? "
+                        f"(name or number, default: {df.columns[-1]}): ").strip()
+        except EOFError:
+            raw = ""
+        if raw == "":
+            target_col = df.columns[-1]
+            _warn(f"No input — using last column as target: {_B}{target_col}{_X}")
+            break
+        # Accept column number
+        if raw.isdigit():
+            idx = int(raw) - 1
+            if 0 <= idx < len(df.columns):
+                target_col = df.columns[idx]
+                break
+            else:
+                _err(f"Number out of range (1–{len(df.columns)}), try again.")
+                continue
+        # Accept column name (case-insensitive)
+        matches = [c for c in df.columns if c.lower() == raw.lower()]
+        if matches:
+            target_col = matches[0]
+            break
+        _err(f"'{raw}' not found in columns, try again.")
+    # Persist the chosen column back to .ml_config.json for future runs
+    try:
+        cfg["target_column"] = target_col
+        CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+    except Exception:
+        pass
+    _ok(f"Target column set to: {_B}{target_col}{_X}")
 
 # ── Auto-detect task type ────────────────────────────────────────────
 n_unique = df[target_col].nunique()
@@ -1636,10 +1670,10 @@ if df[target_col].dtype in (object, bool, "bool") or n_unique <= 20:
     task_type = "classification"
 else:
     task_type = "regression"
-_ok(f"Task type: {B}{task_type}{X}  (unique target values: {n_unique})")
+_ok(f"Task type: {_B}{task_type}{_X}  (unique target values: {n_unique})")
 
 # ── Basic EDA printout ───────────────────────────────────────────────
-print(f"\n{B}Column dtypes:{X}")
+print(f"\n{_B}Column dtypes:{_X}")
 print(df.dtypes.to_string())
 
 missing = df.isnull().sum()
@@ -1647,17 +1681,17 @@ missing_pct = (missing / len(df) * 100).round(1)
 missing_df = pd.DataFrame({"missing": missing, "pct": missing_pct})
 missing_with = missing_df[missing_df["missing"] > 0]
 if not missing_with.empty:
-    print(f"\n{B}Missing values:{X}")
+    print(f"\n{_B}Missing values:{_X}")
     print(missing_with.to_string())
 else:
     _ok("No missing values")
 
 if task_type == "classification":
-    print(f"\n{B}Class balance ({target_col}):{X}")
+    print(f"\n{_B}Class balance ({target_col}):{_X}")
     vc = df[target_col].value_counts()
     print(vc.to_string())
 else:
-    print(f"\n{B}Target distribution ({target_col}):{X}")
+    print(f"\n{_B}Target distribution ({target_col}):{_X}")
     print(df[target_col].describe().to_string())
 
 # ── EDA plots ────────────────────────────────────────────────────────
@@ -1822,7 +1856,7 @@ results = []
 
 for name, estimator, param_grid in candidates:
     try:
-        _info(f"Training {B}{name}{X} with GridSearchCV(cv=3)...")
+        _info(f"Training {_B}{name}{_X} with GridSearchCV(cv=3)...")
         pipe = Pipeline([("preprocessor", ct), ("model", estimator)])
         gs = GridSearchCV(pipe, param_grid, cv=3, n_jobs=-1, scoring=scoring, refit=True)
         gs.fit(X_train, y_train)
@@ -1850,7 +1884,7 @@ best_params = best_result["best_params"]
 best_cv = best_result["cv_score"]
 
 _print_header("Step 5 — Best Model & Final Evaluation")
-print(f"\n  {G}{B}Best model: {best_name}{X}")
+print(f"\n  {_G}{_B}Best model: {best_name}{_X}")
 print(f"  CV {scoring}: {best_cv:.4f}")
 print(f"  Hyperparams: {best_params}")
 
@@ -1885,16 +1919,16 @@ if task_type == "classification":
     )
     metrics["accuracy"] = acc
     metrics["classification_report"] = report
-    print(f"\n  {B}Test Accuracy: {G}{acc:.4f}{X}")
-    print(f"\n{B}Classification Report:{X}")
+    print(f"\n  {_B}Test Accuracy: {_G}{acc:.4f}{_X}")
+    print(f"\n{_B}Classification Report:{_X}")
     print(report)
 else:
     rmse = float(np.sqrt(mean_squared_error(y_test, y_pred)))
     r2 = float(r2_score(y_test, y_pred))
     metrics["rmse"] = rmse
     metrics["r2"] = r2
-    print(f"\n  {B}Test RMSE : {G}{rmse:.4f}{X}")
-    print(f"  {B}Test R²   : {G}{r2:.4f}{X}")
+    print(f"\n  {_B}Test RMSE : {_G}{rmse:.4f}{_X}")
+    print(f"  {_B}Test R²   : {_G}{r2:.4f}{_X}")
 
 # ════════════════════════════════════════════════════════════════════
 # 6.  Save Artifacts
@@ -2064,26 +2098,26 @@ _ok(f"Summary report → {summary_path}")
 # ════════════════════════════════════════════════════════════════════
 
 print(f"""
-{C}{B}╔══════════════════════════════════════════════════════╗
+{_C}{_B}╔══════════════════════════════════════════════════════╗
 ║  ✅  Pipeline Complete!                              ║
-╠══════════════════════════════════════════════════════╣{X}
-{C}{B}║{X}  Dataset    : {csv_path.name} ({df.shape[0]:,} rows × {df.shape[1]} cols)
-{C}{B}║{X}  Task       : {task_type.title()}
-{C}{B}║{X}  Best Model : {best_name}
-{C}{B}║{X}  CV Score   : {best_cv:.4f}  ({scoring})""")
+╠══════════════════════════════════════════════════════╣{_X}
+{_C}{_B}║{_X}  Dataset    : {csv_path.name} ({df.shape[0]:,} rows × {df.shape[1]} cols)
+{_C}{_B}║{_X}  Task       : {task_type.title()}
+{_C}{_B}║{_X}  Best Model : {best_name}
+{_C}{_B}║{_X}  CV Score   : {best_cv:.4f}  ({scoring})""")
 
 if task_type == "classification":
-    print(f"{C}{B}║{X}  Accuracy   : {metrics['accuracy']:.4f}")
+    print(f"{_C}{_B}║{_X}  Accuracy   : {metrics['accuracy']:.4f}")
 else:
-    print(f"{C}{B}║{X}  RMSE       : {metrics['rmse']:.4f}")
-    print(f"{C}{B}║{X}  R²         : {metrics['r2']:.4f}")
+    print(f"{_C}{_B}║{_X}  RMSE       : {metrics['rmse']:.4f}")
+    print(f"{_C}{_B}║{_X}  R²         : {metrics['r2']:.4f}")
 
-print(f"""{C}{B}╠══════════════════════════════════════════════════════╣{X}
-{C}{B}║{X}  {G}models/final_pipeline.pkl{X}   ← ready to use
-{C}{B}║{X}  {G}docs/auto_summary.md{X}        ← full report
-{C}{B}║{X}  {G}plots/eda_correlation.png{X}   ← correlation heatmap
-{C}{B}║{X}  {G}plots/eda_target.png{X}        ← target distribution
-{C}{B}╚══════════════════════════════════════════════════════╝{X}
+print(f"""{_C}{_B}╠══════════════════════════════════════════════════════╣{_X}
+{_C}{_B}║{_X}  {_G}models/final_pipeline.pkl{_X}   ← ready to use
+{_C}{_B}║{_X}  {_G}docs/auto_summary.md{_X}        ← full report
+{_C}{_B}║{_X}  {_G}plots/eda_correlation.png{_X}   ← correlation heatmap
+{_C}{_B}║{_X}  {_G}plots/eda_target.png{_X}        ← target distribution
+{_C}{_B}╚══════════════════════════════════════════════════════╝{_X}
 """)
 
 # ════════════════════════════════════════════════════════════════════
