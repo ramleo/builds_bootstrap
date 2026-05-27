@@ -910,6 +910,40 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
              "img_keywords": "sports stadium competition victory trophy athletics",
              "desc": "AI-powered sports performance prediction"},
         ),
+        (
+            ["insurance", "premium", "claim", "policy", "coverage", "deductible",
+             "insured", "beneficiary", "underwrite", "copay", "annuity",
+             "reinsurance", "indemnity", "actuary", "liability", "peril"],
+            {"icon": "🛡️", "name": "Insurance",
+             "primary": "#1a3c5e", "accent": "#2979ff",
+             "btn": "#1565c0", "btn_hover": "#0d47a1", "body_bg": "#e8f0fe",
+             "gradient": "linear-gradient(135deg, #1a3c5e 0%, #0d2137 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(26,60,94,0.82) 0%,rgba(13,33,55,0.82) 100%)",
+             "img_keywords": "insurance protection umbrella safety security",
+             "desc": "AI-powered insurance risk prediction"},
+        ),
+        (
+            ["supply", "inventory", "demand", "procurement", "vendor", "sku",
+             "stock", "replenishment", "lead time", "warehouse", "distribution"],
+            {"icon": "📦", "name": "Supply Chain",
+             "primary": "#4e342e", "accent": "#ff7043",
+             "btn": "#f4511e", "btn_hover": "#bf360c", "body_bg": "#fbe9e7",
+             "gradient": "linear-gradient(135deg, #4e342e 0%, #3e2723 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(78,52,46,0.82) 0%,rgba(62,39,35,0.82) 100%)",
+             "img_keywords": "warehouse logistics supply inventory boxes",
+             "desc": "AI-powered supply chain prediction"},
+        ),
+        (
+            ["text", "sentiment", "review", "nlp", "tweet", "comment", "opinion",
+             "positive", "negative", "corpus", "token", "language", "document"],
+            {"icon": "💬", "name": "NLP",
+             "primary": "#4527a0", "accent": "#7c4dff",
+             "btn": "#651fff", "btn_hover": "#4527a0", "body_bg": "#ede7f6",
+             "gradient": "linear-gradient(135deg, #4527a0 0%, #311b92 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(69,39,160,0.82) 0%,rgba(49,27,146,0.82) 100%)",
+             "img_keywords": "communication language words text digital",
+             "desc": "AI-powered text analysis"},
+        ),
     ]
 
     best_theme, best_score = None, 0
@@ -991,8 +1025,11 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         _img_kw      = theme.get("img_keywords", "")
         _img_overlay = theme.get("img_overlay", gradient)
         if _img_kw:
-            _encoded  = _urlparse.quote(_img_kw)
-            _img_url  = f"https://source.unsplash.com/featured/1400x560?{_encoded}"
+            # loremflickr: free, no API key, keyword-driven real photos.
+            # Format: /width/height/keyword1,keyword2,keyword3
+            # Use first 4 meaningful words, joined by commas (no spaces).
+            _kw_csv   = ",".join(_img_kw.split()[:4])
+            _img_url  = f"https://loremflickr.com/1400/560/{_kw_csv}"
             header_bg = f"{_img_overlay}, url('{_img_url}') center / cover no-repeat"
         else:
             header_bg = gradient
@@ -1224,29 +1261,55 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '  var srvDot  = document.getElementById("srvDot");\n'
         '  var srvTxt  = document.getElementById("srvTxt");\n'
         '\n'
-        '  // ── Server health check ──────────────────────────────────────────\n'
+        '  // ── Server health check with cold-start retry ───────────────────\n'
+        '  // Render free tier spins down after 15 min; the model takes a few\n'
+        '  // seconds to load after waking up.  We poll /health every 5 s and\n'
+        '  // keep the Predict button disabled until the server is truly ready.\n'
+        '  var _healthTimer = null;\n'
+        '  var _serverReady = false;\n'
+        '\n'
+        '  function setServerState(state, msg) {\n'
+        '    srvDot.className = "srv-dot " + state;\n'
+        '    srvTxt.textContent = msg;\n'
+        '    _serverReady = (state === "online");\n'
+        '    pBtn.disabled = !_serverReady;\n'
+        '    pBtn.style.opacity = _serverReady ? "1" : "0.5";\n'
+        '    pBtn.title = _serverReady ? "" : "Waiting for server to become ready\xe2\x80\xa6";\n'
+        '  }\n'
+        '\n'
         '  function checkServer() {\n'
-        '    srvDot.className = "srv-dot checking";\n'
-        '    srvTxt.textContent = "Checking server\xe2\x80\xa6";\n'
+        '    setServerState("checking", "Checking server\xe2\x80\xa6");\n'
         '    fetch("/health")\n'
         '      .then(function(r) {\n'
         '        if (r.ok) {\n'
-        '          srvDot.className = "srv-dot online";\n'
-        '          srvTxt.textContent = "Server online";\n'
+        '          return r.json().then(function(d) {\n'
+        '            if (d && d.status === "ok") {\n'
+        '              setServerState("online", "Server online");\n'
+        '              if (_healthTimer) { clearInterval(_healthTimer); _healthTimer = null; }\n'
+        '            } else {\n'
+        '              setServerState("offline", "Server warming up\xe2\x80\xa6 retrying");\n'
+        '            }\n'
+        '          });\n'
         '        } else {\n'
-        '          srvDot.className = "srv-dot offline";\n'
-        '          srvTxt.textContent = "Server error (HTTP " + r.status + ")";\n'
+        '          setServerState("offline", "Server error (HTTP " + r.status + ") \xe2\x80\x94 retrying");\n'
         '        }\n'
         '      })\n'
         '      .catch(function() {\n'
-        '        srvDot.className = "srv-dot offline";\n'
-        '        srvTxt.textContent = "Server offline \xe2\x80\x94 run: uvicorn app:app --reload";\n'
+        '        setServerState("offline", "Server offline \xe2\x80\x94 run: uvicorn app:app --reload");\n'
+        '        if (_healthTimer) { clearInterval(_healthTimer); _healthTimer = null; }\n'
         '      });\n'
         '  }\n'
         '  checkServer();\n'
+        '  _healthTimer = setInterval(checkServer, 5000);\n'
         '\n'
         '  form.addEventListener("submit", function(e) {\n'
         '    e.preventDefault();\n'
+        '    if (!_serverReady) {\n'
+        '      errMsg.style.whiteSpace = "pre-wrap";\n'
+        '      errMsg.textContent = "Server is not ready yet.\\nPlease wait until the status shows Server online.";\n'
+        '      result.classList.add("show");\n'
+        '      return;\n'
+        '    }\n'
         '    var payload = {};\n'
         '    form.querySelectorAll("input").forEach(function(el) {\n'
         '      var v = el.value.trim();\n'
@@ -1306,7 +1369,8 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '      result.classList.add("show");\n'
         '    })\n'
         '    .finally(function() {\n'
-        '      pBtn.disabled = false;\n'
+        '      pBtn.disabled = !_serverReady;\n'
+        '      pBtn.style.opacity = _serverReady ? "1" : "0.5";\n'
         '      pBtn.innerHTML = "&#x1F50D;&nbsp; Predict";\n'
         '    });\n'
         '  });\n'

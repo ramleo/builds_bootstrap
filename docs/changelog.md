@@ -1,5 +1,56 @@
 # Changelog
 
+## v1.2.0 — Real Background Photos + Cold-Start Fix + 19 Domains (2026-05-27)
+
+### Summary
+Three improvements: (1) background images now use **loremflickr.com** (replaces the defunct `source.unsplash.com`), so every dataset gets a real, keyword-matched photo; (2) Predict button is locked until the server confirms it is fully ready — fixes the Render cold-start 404 race; (3) four new domains added (Insurance 🛡️, Supply Chain 📦, NLP 💬, plus the prior Sports 🏆).
+
+---
+
+### What changed
+
+#### Background images — switched from Unsplash (defunct) to loremflickr
+
+`source.unsplash.com/featured/` was shut down and returns HTTP 503. Replaced with:
+
+```
+https://loremflickr.com/1400/560/{keyword1,keyword2,keyword3,keyword4}
+```
+
+loremflickr is free, requires no API key, and returns real Creative-Commons photos matched to the keywords. The first four words from `img_keywords` are used, joined with commas.
+
+#### Cold-start race condition fixed (Render 404)
+
+**Root cause:** Render's free tier spins down after 15 min of inactivity. When it wakes, `/health` responds within seconds (before the ML model finishes loading). Previously, `checkServer()` called `/health` once and immediately enabled the Predict button — so if the user clicked quickly, FastAPI was still loading and returned 404 from Render's load balancer.
+
+**Fix:**
+- `setServerState(state, msg)` helper controls dot color + label + button disabled/opacity atomically
+- `_healthTimer` polls `/health` every 5 seconds until `{"status":"ok"}` is confirmed
+- Predict button stays **greyed out / disabled** (`opacity: 0.5`, `disabled`) until the server is truly ready
+- Timer clears itself once online (stops polling)
+- If the user submits before ready: friendly message "Server is not ready yet. Please wait..."
+- `.finally` block re-checks `_serverReady` instead of unconditionally re-enabling
+
+#### New domains (total: 19)
+
+| Icon | Domain | Trigger keywords (sample) |
+|---|---|---|
+| 🛡️ Insurance | `insurance`, `premium`, `claim`, `policy`, `coverage`, `deductible` |
+| 📦 Supply Chain | `supply`, `inventory`, `demand`, `procurement`, `vendor`, `sku` |
+| 💬 NLP | `text`, `sentiment`, `review`, `nlp`, `tweet`, `corpus`, `token` |
+
+---
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `auto_pipeline.py` | loremflickr URL; 3 new domains; cold-start retry JS |
+| `bootstrap.py` | Same changes inside embedded `FILES["auto_pipeline.py"]` string |
+| `docs/changelog.md` | This entry |
+
+---
+
 ## v1.1.1 — Server Status Indicator & Better Error Handling (2026-05-27)
 
 ### Summary
