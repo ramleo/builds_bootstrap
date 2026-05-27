@@ -2825,3 +2825,166 @@ def _post_pipeline_menu(root, cfg, task_type, pipeline, label_encoder=None):
 # ── Run the post-pipeline menu ────────────────────────────────────────
 _post_pipeline_menu(ROOT, cfg, task_type, final_pipe, label_encoder)'''
 # .gitkeep for empty directories
+FILES["data/.gitkeep"]   = ""
+FILES["models/.gitkeep"] = ""
+FILES["plots/.gitkeep"]  = ""
+
+# ── Prerequisites Check ──────────────────────────────────────────────
+def check_prereqs():
+    print(f"\n{C}{B}Checking prerequisites...{X}")
+
+    def _run(cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return None
+
+    if shutil.which("brew"):
+        print(f"  {G}✔ Homebrew{X}")
+    else:
+        print(f"  {Y}⚠  Homebrew not found — installing...{X}")
+        os.system('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
+        if Path("/opt/homebrew/bin/brew").exists():
+            os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
+
+    if shutil.which("npm"):
+        r = _run(["node", "--version"])
+        print(f"  {G}✔ Node.js {r.stdout.strip() if r else ''}{X}")
+    else:
+        print(f"  {Y}⚠  Node.js not found — installing via Homebrew...{X}")
+        os.system("brew install node")
+
+    if shutil.which("claude"):
+        r = _run(["claude", "--version"])
+        ver = r.stdout.strip().split("\n")[0] if r else "installed"
+        print(f"  {G}✔ Claude Code CLI {ver}{X}")
+    else:
+        print(f"  {Y}⚠  Claude Code CLI not found — installing...{X}")
+        result = os.system("npm install -g @anthropic-ai/claude-code")
+        if result == 0:
+            print(f"  {G}✔ Claude Code CLI installed{X}")
+        else:
+            print(f"  {R}✗ Auto-install failed. Run manually:{X}")
+            print(f"    npm install -g @anthropic-ai/claude-code")
+
+# ── Main ─────────────────────────────────────────────────────────────
+print(f"""
+{C}{B}╔══════════════════════════════════════════════════╗
+║        🤖  ML Pipeline Template  v{VERSION}          ║
+║   End-to-End Machine Learning Automation         ║
+╚══════════════════════════════════════════════════╝{X}
+""")
+
+check_prereqs()
+cfg = collect_inputs()
+
+# ── Create project dir (staging → atomic move, APFS-safe) ────────────
+timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
+project_dir = Path(".").resolve() / f"{cfg['project_name']}_{timestamp}"
+staging_dir = project_dir.parent / f".ml_staging_{project_dir.name}"
+
+if project_dir.exists():
+    print(f"\n{R}Error:{X} '{project_dir.name}' already exists. Choose a different name.")
+    sys.exit(1)
+
+staging_dir.mkdir(parents=True, exist_ok=True)
+
+# Write template files — skip setup scripts (they belong in the template source, not projects)
+SKIP_IN_PROJECT = {"start.sh", "init.py"}
+print(f"\n{G}▶ Preparing project files...{X}")
+for rel_path, content in FILES.items():
+    if rel_path in SKIP_IN_PROJECT:
+        continue
+    full = staging_dir / rel_path
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_text(content, encoding="utf-8")
+print(f"  {G}✔ Template files ready{X}")
+
+# Copy dataset if provided
+if cfg["dataset_path"] and Path(cfg["dataset_path"]).is_file():
+    (staging_dir / "data").mkdir(exist_ok=True)
+    shutil.copy2(cfg["dataset_path"], staging_dir / "data" / cfg["dataset_filename"])
+    print(f"  {G}✔ Dataset copied: {cfg['dataset_filename']}{X}")
+
+write_config(cfg, staging_dir)
+
+# .venv + deps
+print(f"\n{G}▶ Creating Python virtual environment (.venv)...{X}")
+subprocess.run([sys.executable, "-m", "venv", str(staging_dir / ".venv")], check=True)
+print(f"  {G}✔ Virtual environment created{X}")
+
+print(f"{G}▶ Installing dependencies (this may take a minute)...{X}")
+_pip = str(staging_dir / ".venv" / "bin" / "pip")
+subprocess.run([_pip, "install", "--upgrade", "pip", "-q"], check=True)
+_req = staging_dir / "requirements.txt"
+if _req.exists():
+    subprocess.run([_pip, "install", "-r", str(_req), "-q"], check=True)
+print(f"  {G}✔ Dependencies installed{X}")
+
+# Atomic move → VS Code sees project appear once, fully complete
+print(f"\n{G}▶ Creating project at: {project_dir}{X}")
+shutil.move(str(staging_dir), str(project_dir))
+
+# Fix .venv shebangs after path changed
+try:
+    subprocess.run([sys.executable, "-m", "venv", "--upgrade", str(project_dir / ".venv")],
+                   check=True, capture_output=True)
+except Exception:
+    try:
+        subprocess.run([str(project_dir / ".venv" / "bin" / "python"),
+                        "-m", "pip", "install", "pip", "-q"],
+                       check=False, capture_output=True)
+    except Exception:
+        pass
+
+# Summary
+plat_labels = {
+    "ask_later": "Ask me later",   "render":   "Render (free tier)",
+    "fly.io":    "Fly.io",         "railway":  "Railway",
+    "aws":       "AWS App Runner", "gcp":      "GCP Cloud Run",
+    "azure":     "Azure Container Apps", "none": "Local / Docker only",
+}
+fn   = cfg["dataset_filename"] or "<not provided yet>"
+plat = plat_labels.get(cfg["platform"], cfg["platform"])
+u, r = cfg["github_username"], cfg["github_repo"]
+gh_line = f"\n{C}{B}║{X}  🐙  GitHub : github.com/{u}/{r}" if u else ""
+print(f"""
+{C}{B}╔══════════════════════════════════════════════════╗
+║  ✅  Project ready!                              ║
+╠══════════════════════════════════════════════════╣{X}
+{C}{B}║{X}  📁  {project_dir}
+{C}{B}║{X}  🐍  Venv   : .venv/
+{C}{B}║{X}  📊  Data   : {fn}
+{C}{B}║{X}  🚀  Deploy : {plat}{gh_line}
+{C}{B}╠══════════════════════════════════════════════════╣{X}
+{C}{B}║{X}  ✅  Launching Claude Code...
+{C}{B}╚══════════════════════════════════════════════════╝{X}
+""")
+
+# Launch menu
+print(f"\n{B}How would you like to run the pipeline?{X}")
+print(f"  1) {G}Claude Code{X}   — AI-driven, fully automated (recommended)")
+print(f"  2) {C}Auto Pipeline{X} — no Claude subscription needed (pure sklearn)")
+print(f"  3) {Y}Manual{X}        — I'll run it myself later")
+launch_choice = input("Enter choice (default: 1): ").strip() or "1"
+
+os.chdir(project_dir)
+
+if launch_choice == "2":
+    print(f"\n{G}▶ Running automated pipeline (no Claude required)...{X}")
+    python = str(project_dir / ".venv" / "bin" / "python")
+    # os.execv replaces this process — child gets stdin cleanly (no buffering issue)
+    os.execv(python, [python, "auto_pipeline.py"])
+elif launch_choice == "3":
+    print(f"\n{Y}▶ Manual mode — project is ready at:{X}")
+    print(f"   cd {project_dir}")
+    print(f"   source .venv/bin/activate")
+    print(f"   python3 auto_pipeline.py   # auto pipeline")
+    print(f"   claude .                   # AI-driven pipeline")
+else:
+    print(f"\n{G}▶ Launching Claude Code in your new project...{X}")
+    if shutil.which("claude"):
+        subprocess.run(["claude", "."])
+    else:
+        print(f"{Y}Claude Code CLI not found. Install: npm install -g @anthropic-ai/claude-code{X}")
+        print(f"Then run: {B}cd {project_dir} && source .venv/bin/activate && claude .{X}")
