@@ -3706,7 +3706,7 @@ Regression:
 
 ### Post-Pipeline Deploy Functions
 
-After the ML training completes, `auto_pipeline.py` shows a second menu that lets users generate a FastAPI app, Dockerfile, push to GitHub, and deploy to Render — all without Claude. These functions are appended to the bottom of `auto_pipeline.py` and called as `_post_pipeline_menu(ROOT, cfg, task_type, final_pipe)`.
+After the ML training completes, `auto_pipeline.py` shows a second menu that lets users generate a FastAPI app, themed frontend, Dockerfile, push to GitHub, and deploy to Render — all without Claude. These functions are appended to the bottom of `auto_pipeline.py` and called as `_post_pipeline_menu(ROOT, cfg, task_type, final_pipe, label_encoder)`.
 
 #### ANSI Alias Fix (critical)
 
@@ -3734,16 +3734,66 @@ def _get_features(pipeline):
     return num_feats, cat_feats
 ```
 
+#### `_detect_domain(dataset_filename, column_names, project_name="")` → theme dict
+
+Dynamically detects the dataset domain from the filename, project name, and column names. No configuration required.
+
+**How it works:**
+1. Normalises all inputs to lowercase, replacing `_` and `-` with spaces
+2. Concatenates filename + project name + all column names into a single search string
+3. Scores 10 known domains by counting keyword matches in the search string
+4. Returns the highest-scoring domain's theme dict; falls back to a generic midnight-blue theme when nothing scores > 0
+
+**Supported domains and their trigger keywords:**
+
+| Domain | Icon | Example trigger columns |
+|---|---|---|
+| Health | 🩺 | glucose, insulin, bmi, blood, diabetes, cancer, heart, patient |
+| Travel | ✈️ | flight, airline, delay, airport, passenger, departure, ticket |
+| Finance | 💰 | loan, credit, fraud, income, bank, salary, payment, default |
+| Shipping | 🚢 | ship, cargo, freight, container, port, logistics, vessel |
+| Real Estate | 🏠 | house, sqft, bedroom, bathroom, property, rent, floor |
+| HR | 👤 | employee, attrition, department, churn, satisfaction, tenure |
+| Quality | 🍷 | wine, quality, alcohol, acidity, sugar, flavor, sulphates |
+| Maritime | ⚓ | titanic, survived, pclass, embarked, lifeboat |
+| Retail | 🛒 | customer, purchase, review, sales, cart, discount |
+| Energy | ⚡ | energy, electricity, solar, co2, emission, consumption |
+| Generic | 🤖 | *(fallback — no score threshold met)* |
+
+**Theme dict keys:** `icon`, `name`, `primary`, `accent`, `btn`, `btn_hover`, `body_bg`, `gradient`, `desc`
+
+#### `_generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder=None)` → writes `index.html`
+
+Generates a responsive, single-file prediction UI themed to the dataset domain. Writes `root/index.html`.
+
+**Key implementation decisions:**
+
+- **Placeholder substitution, not f-strings** — The HTML template uses `TMPL_*` placeholders (e.g. `TMPL_GRADIENT`, `TMPL_ACCENT`). All substitutions are done with `.replace()` after the full string is assembled. This avoids the need to escape CSS `{ }` braces in f-strings. Longer tokens are replaced before shorter ones to prevent partial substitution (e.g. `TMPL_BTN_HOVER` before `TMPL_BTN`).
+- **Accent alpha for focus ring** — `accent_alpha = accent + "33"` appends hex opacity (20%) to the accent colour for the CSS `box-shadow` focus ring.
+- **Class labels from label_encoder** — If `label_encoder` is provided, `label_encoder.classes_` populates the JS `CLASSES` array so probability bars show real class names instead of "Class 0", "Class 1".
+- **Form fields** — Numeric features become `<input type="number" step="any">`; categorical features become `<input type="text">`.
+- **Vanilla JS only** — No external dependencies. Fetch, DOM manipulation, and CSS animations are all built-in.
+
+**UI features:**
+- Themed header: gradient background + emoji icon + project title + domain description
+- Responsive 2-column form grid (collapses to 1 column on mobile)
+- Animated probability bars for classification (animated fill on reveal)
+- Spinner inside the Predict button during API call
+- Result panel slides in with a CSS animation
+- `GET /health` and `/docs` links in the footer
+
 #### `_generate_app(root, task_type, num_feats, cat_feats)` → writes `app.py`
 
 Generates a complete FastAPI app using string concatenation (NOT f-strings with dict keys — Python 3.9–3.11 forbid backslashes inside `{}` in f-strings). Key design points:
 
-- Imports: `fastapi`, `uvicorn`, `joblib`, `pandas`, `pydantic`
+- Imports: `os`, `fastapi`, `fastapi.responses.FileResponse`, `fastapi.middleware.cors.CORSMiddleware`, `uvicorn`, `joblib`, `pandas`, `pydantic`
+- Adds `CORSMiddleware(allow_origins=["*"])` so the frontend can call the API from any origin
 - Loads `models/final_pipeline.pkl` and (for classification) `models/label_encoder.pkl` at startup
 - `InputData` Pydantic model with numeric fields as `Optional[float] = None` and categorical fields as `Optional[str] = None`
-- `GET /health` → `{"status": "ok", "model": "<best_model_name>"}`
-- `POST /predict` → `{"prediction": <label>, "probabilities": {class: prob, ...}}`
-- `POST /predict/batch` → `{"predictions": [...], "probabilities": [...]}`
+- `GET /` → `FileResponse("index.html")` if the file exists; falls back to JSON `{"message": "ML Prediction API", "docs": "/docs"}`
+- `GET /health` → `{"status": "ok", "model": "loaded"}`
+- `POST /predict` → `{"prediction": <label>, "probabilities": [...]}`
+- `POST /predict/batch` → `{"predictions": [...]}`
 - For regression: returns `{"prediction": float}` without probabilities
 - Uses `pipeline.predict_proba` for classification (requires `probability=True` on SVC)
 
@@ -3761,12 +3811,15 @@ FROM python:3.11-slim
 WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY app.py .
+COPY index.html* .
 COPY models/ models/
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 EXPOSE 8000
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
+
+> **Why `COPY index.html*` (glob)?** If `_generate_docker()` is ever called without `_generate_frontend()` having run first, `COPY index.html .` would fail with a Docker build error. The glob `*` silently skips the copy when the file is absent.
 
 `.dockerignore` excludes: `.git/`, `__pycache__/`, `.venv/`, `data/`, `plots/`, `tests/`, `docs/`, `*.md`, `.env`, `.DS_Store`, `.claude/`
 
@@ -3811,12 +3864,12 @@ services:
         value: "3.11.0"
 ```
 
-#### `_post_pipeline_menu(root, cfg, task_type, pipeline)` → post-pipeline deploy menu
+#### `_post_pipeline_menu(root, cfg, task_type, pipeline, label_encoder=None)` → post-pipeline deploy menu
 
-Called immediately after `joblib.dump(final_pipe, pipeline_path)`. Uses `_C`, `_B`, `_X` aliases throughout. Key implementation details:
+Called immediately after `joblib.dump(final_pipe, pipeline_path)`. Signature includes `label_encoder=None` so class names can be passed through to `_generate_frontend()` for the probability bars. Uses `_C`, `_B`, `_X` aliases throughout. Key implementation details:
 
 ```python
-def _post_pipeline_menu(root, cfg, task_type, pipeline):
+def _post_pipeline_menu(root, cfg, task_type, pipeline, label_encoder=None):
     print(f"\n{_B}What would you like to do next?{_X}")
     print(f"  1) Generate FastAPI app + Dockerfile")
     print(f"  2) Push to GitHub")
@@ -3828,6 +3881,16 @@ def _post_pipeline_menu(root, cfg, task_type, pipeline):
     except EOFError:
         choice = "4"   # non-interactive / piped input → default to "All"
     ...
+    if do_app:
+        _generate_app(root, task_type, num_feats, cat_feats)
+        _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder)
+        _generate_docker(root)
+```
+
+**Call at bottom of script:**
+```python
+# Pass label_encoder so _generate_frontend() can display real class names
+_post_pipeline_menu(ROOT, cfg, task_type, final_pipe, label_encoder)
 ```
 
 **The `try/except EOFError: choice = "4"` is mandatory.** When `bootstrap.py` launches `auto_pipeline.py` via `os.execv()`, stdin is inherited cleanly. But if the process is invoked with piped input (e.g. in tests), the stdin buffer may be exhausted by the time the post-pipeline menu runs — `EOFError` is the expected exception in that case, and defaulting to `"4"` (All of the above) gives the best test coverage.
@@ -3865,6 +3928,10 @@ claude .                        # run Claude Code pipeline
 | `subprocess.run()` for auto_pipeline.py launch | Post-pipeline `input()` gets EOFError immediately | Use `os.execv()` — replaces process, stdin passes cleanly |
 | `input()` raises EOFError in piped/test mode | Post-pipeline menu crashes | Wrap in `try/except EOFError: choice = "4"` |
 | Backslash in f-string `{}` (Python ≤ 3.11) | `SyntaxError: f-string expression part cannot include a backslash` | Build string line by line with `+=` instead of f-string with dict-key access |
+| Using f-strings for HTML template in `_generate_frontend()` | CSS `{ }` braces cause `KeyError` or `SyntaxError` | Use `TMPL_*` placeholders + `.replace()` substitution instead |
+| Replacing short token before long token (e.g. `TMPL_BTN` before `TMPL_BTN_HOVER`) | `TMPL_BTN_HOVER` becomes `<value>_HOVER` | Replace longer tokens first — order the `replacements` list accordingly |
+| `COPY index.html .` in Dockerfile without the glob | Docker build fails if `index.html` doesn't exist | Use `COPY index.html* .` — glob silently skips the copy when file is absent |
+| Not passing `label_encoder` to `_post_pipeline_menu()` | Probability bars show "Class 0", "Class 1" instead of real names | Pass `label_encoder` as the 5th argument: `_post_pipeline_menu(ROOT, cfg, task_type, final_pipe, label_encoder)` |
 
 ---
 

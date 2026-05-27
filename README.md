@@ -14,6 +14,7 @@
 - 🏆 **Trains & tunes** models with GridSearchCV (multiple candidates)
 - 📊 **Evaluates** with classification report / RMSE + R²
 - 🌐 **Wraps** the model in a FastAPI REST API (`/predict`, `/predict/batch`)
+- 🎨 **Auto-generates a themed prediction UI** (`index.html`) — design matches your dataset domain (medical, travel, finance, shipping, etc.)
 - 🐳 **Containerises** with a multi-stage Docker image
 - 🚀 **Deploys** to your chosen cloud platform
 - 📄 **Documents** everything in `docs/`
@@ -86,7 +87,7 @@ After setup, a second menu lets you choose how to run the pipeline:
 **Option 2 (Auto Pipeline)** runs without any Claude subscription and includes a post-pipeline menu:
 
 ```
-  1) Generate FastAPI app + Dockerfile
+  1) Generate FastAPI app + Dockerfile + themed frontend
   2) Push to GitHub
   3) Deploy to Render
   4) All of the above ← recommended
@@ -114,7 +115,8 @@ my-project_20260524_143000/
 ├── src/preprocess.py           ← generated preprocessing script
 ├── tests/test_pipeline.py      ← generated test suite
 ├── docs/                       ← summary, guides, test results
-├── app.py                      ← FastAPI app
+├── app.py                      ← FastAPI app (serves index.html at GET /)
+├── index.html                  ← auto-themed prediction UI (served at /)
 ├── Dockerfile                  ← multi-stage build
 ├── requirements.txt            ← pinned dependencies
 └── render.yaml / fly.toml /    ← deployment config (platform-specific)
@@ -167,6 +169,30 @@ Task type is **auto-detected** from your target column — no config needed.
 | `.gitignore` | Standard Python / macOS / IDE ignore rules |
 | `docs/claude_structure.md` | CLAUDE.md split structure reference |
 | `docs/how_to_run.md` | Step-by-step usage guide |
+
+---
+
+## Auto-Themed Frontend
+
+When you choose **Generate FastAPI app + Dockerfile** (or **All of the above**) from the post-pipeline menu, you also get an `index.html` prediction UI. The design is automatically matched to your dataset:
+
+| Dataset domain | Detected from | Theme |
+|---|---|---|
+| 🩺 Health / Medical | `glucose`, `bmi`, `insulin`, `diabetes`… | Deep teal gradient |
+| ✈️ Travel / Airline | `flight`, `airline`, `delay`, `airport`… | Navy blue gradient |
+| 💰 Finance / Banking | `loan`, `credit`, `fraud`, `salary`… | Dark blue + gold |
+| 🚢 Shipping / Logistics | `ship`, `cargo`, `freight`, `container`… | Ocean blue + steel |
+| 🏠 Real Estate | `house`, `sqft`, `bedroom`, `garage`… | Brown + red |
+| 👤 HR / People | `employee`, `attrition`, `churn`… | Purple gradient |
+| 🍷 Quality | `wine`, `acidity`, `alcohol`… | Burgundy gradient |
+| ⚓ Maritime | `titanic`, `survived`, `pclass`… | Ocean blue |
+| 🛒 Retail | `customer`, `purchase`, `sales`… | Orange gradient |
+| ⚡ Energy | `electricity`, `solar`, `co2`… | Amber gradient |
+| 🤖 Generic | *(anything else)* | Midnight blue |
+
+Detection is **fully dynamic** — it scans the actual column names, dataset filename, and project name. No configuration needed.
+
+The generated `index.html` is served directly from the FastAPI app at `GET /`, so visiting the live URL shows the prediction UI. The Swagger docs remain at `/docs`.
 
 ---
 

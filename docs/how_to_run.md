@@ -123,10 +123,10 @@ What would you like to do next?
 
 | Option | What it does |
 |---|---|
-| 1 | Writes `app.py` (FastAPI with `/health`, `/predict`, `/predict/batch`) and a multi-stage `Dockerfile` |
+| 1 | Writes `app.py` (FastAPI with `/health`, `/predict`, `/predict/batch`), `index.html` (auto-themed prediction UI), and a multi-stage `Dockerfile` |
 | 2 | `git init` → commit → `gh repo create` → push to GitHub |
 | 3 | Writes `render.yaml` and prints the 5-step Render dashboard walkthrough |
-| 4 | All three steps in sequence — app, Docker, GitHub, then Render |
+| 4 | All three steps in sequence — app + frontend + Docker, GitHub, then Render |
 | 5 | Exits; run any step manually later |
 
 > **Prerequisite for option 2/4:** `brew install gh && gh auth login` (GitHub CLI must be authenticated)
@@ -157,11 +157,14 @@ my-project_20260526_143000/
 ├── src/preprocess.py       ← auto-generated preprocessing script (Claude option)
 ├── tests/test_pipeline.py  ← auto-generated test suite (Claude option)
 ├── docs/                   ← summary, guides, test results
-├── app.py                  ← FastAPI prediction API
+├── app.py                  ← FastAPI prediction API (serves index.html at GET /)
+├── index.html              ← auto-themed prediction UI — design matches your dataset domain
 ├── Dockerfile              ← multi-stage container build
 ├── requirements.txt        ← pinned library versions
 └── render.yaml / fly.toml  ← deployment config (platform-specific)
 ```
+
+> **Themed frontend:** `index.html` is a single-file prediction UI generated automatically alongside `app.py`. The visual theme (colors, icon, gradient) is matched to your dataset — e.g. a health dataset gets a teal medical theme, a flight dataset gets a navy aviation theme. It is served at the root URL (`GET /`) so visiting `https://your-project.onrender.com/` opens the prediction form directly.
 
 ---
 
