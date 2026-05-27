@@ -49,25 +49,25 @@ for d in (DATA_DIR, MODELS_DIR, PLOTS_DIR, DOCS_DIR):
 
 def _print_header(text: str) -> None:
     width = 60
-    print(f"\n{C}{B}{'═' * width}{X}")
-    print(f"{C}{B}  {text}{X}")
-    print(f"{C}{B}{'═' * width}{X}")
+    print(f"\n{_C}{_B}{'═' * width}{_X}")
+    print(f"{_C}{_B}  {text}{_X}")
+    print(f"{_C}{_B}{'═' * width}{_X}")
 
 
 def _ok(msg: str) -> None:
-    print(f"  {G}✔  {msg}{X}")
+    print(f"  {_G}✔  {msg}{_X}")
 
 
 def _warn(msg: str) -> None:
-    print(f"  {Y}⚠  {msg}{X}")
+    print(f"  {_Y}⚠  {msg}{_X}")
 
 
 def _err(msg: str) -> None:
-    print(f"  {R}✗  {msg}{X}")
+    print(f"  {_R}✗  {msg}{_X}")
 
 
 def _info(msg: str) -> None:
-    print(f"  {C}→  {msg}{X}")
+    print(f"  {_C}→  {msg}{_X}")
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -426,9 +426,18 @@ metrics = {}
 
 if task_type == "classification":
     acc = accuracy_score(y_test, y_pred)
+    # Build label list restricted to classes that appear in y_test or y_pred,
+    # so target_names length always matches the number of labels reported.
+    if label_encoder is not None:
+        present_labels = sorted(set(y_test) | set(y_pred))
+        target_names_filtered = [str(label_encoder.classes_[i]) for i in present_labels]
+    else:
+        present_labels = None
+        target_names_filtered = None
     report = classification_report(
         y_test, y_pred,
-        target_names=[str(c) for c in label_encoder.classes_] if label_encoder else None,
+        labels=present_labels,
+        target_names=target_names_filtered,
     )
     metrics["accuracy"] = acc
     metrics["classification_report"] = report
