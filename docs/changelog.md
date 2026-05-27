@@ -1,5 +1,76 @@
 # Changelog
 
+## v1.1.1 — Server Status Indicator & Better Error Handling (2026-05-27)
+
+### Summary
+The prediction UI now shows a live **server status bar** (green dot = online, red = offline) and replaces the cryptic `"Failed to fetch"` browser error with a clear, actionable message when the FastAPI server is not running.
+
+---
+
+### Problem fixed
+When the uvicorn/FastAPI server was not running, clicking Predict caused the `.catch` handler to display the raw browser error `"Failed to fetch"` (or `"API Error: Unable to connect to API (ConnectionRefused)"` on some browsers) — unhelpful to end users.
+
+### What changed
+
+#### `auto_pipeline.py` and `bootstrap.py` (embedded `FILES["auto_pipeline.py"]`)
+
+Both files updated identically.
+
+##### New `.srv-bar` CSS (inserted before `/* Footer */`)
+
+```css
+.srv-bar  { display: flex; align-items: center; gap: 8px; font-size: 0.78rem;
+            font-weight: 600; color: #666; margin-bottom: 20px;
+            padding: 9px 14px; background: #f8f9fa;
+            border-radius: 8px; border: 1px solid #e8eaed; }
+.srv-dot  { width: 9px; height: 9px; border-radius: 50%;
+            background: #d1d5db; flex-shrink: 0; transition: background 0.3s; }
+.srv-dot.online   { background: #22c55e; }
+.srv-dot.offline  { background: #ef4444; }
+.srv-dot.checking { animation: pulse 1s infinite; }
+@keyframes pulse  { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+```
+
+##### New HTML server status bar (inserted at top of `.card`, before the form title)
+
+```html
+<div class="srv-bar">
+  <span class="srv-dot checking" id="srvDot"></span>
+  <span id="srvTxt">Checking server…</span>
+</div>
+```
+
+##### New `checkServer()` JavaScript (runs on page load)
+
+Pings `GET /health`. Updates the dot and label:
+- ✅ HTTP 200 → green dot, "Server online"
+- ⚠️ Non-2xx → red dot, "Server error (HTTP NNN)"
+- ❌ Network error → red dot, "Server offline — run: uvicorn app:app --reload"
+
+##### Improved `.catch` handler
+
+Before: `errMsg.textContent = err.message;` → shows raw "Failed to fetch"
+
+After: detects `TypeError` / "Failed to fetch" / "NetworkError" / "ERR_CONNECTION_REFUSED" and displays:
+```
+⚠️ Cannot reach the API server.
+Make sure uvicorn is running:
+    uvicorn app:app --reload
+```
+Also sets the server dot to red so both the status bar and the error panel indicate the problem.
+
+---
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `auto_pipeline.py` | `.srv-bar` CSS + HTML div + `checkServer()` + improved `.catch` |
+| `bootstrap.py` | Same changes inside embedded `FILES["auto_pipeline.py"]` string |
+| `docs/changelog.md` | This entry |
+
+---
+
 ## v1.1.0 — Dynamic Image-Themed Frontend (2026-05-27)
 
 ### Summary
