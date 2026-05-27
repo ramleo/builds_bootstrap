@@ -2761,10 +2761,14 @@ def _deploy_render(root, cfg):
     gh_user  = cfg.get("github_username", "")
     gh_repo  = cfg.get("github_repo", "")
 
+    # Render normalises the service name to lowercase and replaces
+    # underscores with hyphens when forming the subdomain URL.
+    render_name = proj.lower().replace("_", "-")
+
     render_lines = [
         "services:",
         "  - type: web",
-        "    name: " + proj,
+        "    name: " + render_name,
         "    runtime: python",
         "    buildCommand: pip install -r requirements.txt",
         "    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT",
@@ -2773,7 +2777,7 @@ def _deploy_render(root, cfg):
         '        value: "3.11.0"',
     ]
     (root / "render.yaml").write_text("\n".join(render_lines) + "\n", encoding="utf-8")
-    _ok("render.yaml created")
+    _ok("render.yaml created  (service name: " + render_name + ")")
 
     subprocess.run(["git", "add", "render.yaml"], cwd=str(root), capture_output=True)
     subprocess.run(["git", "commit", "-m", "Add render.yaml for Render deployment"],
@@ -2781,13 +2785,14 @@ def _deploy_render(root, cfg):
     subprocess.run(["git", "push", "origin", "main"], cwd=str(root), capture_output=True)
     _ok("render.yaml pushed to GitHub")
 
-    live = "https://" + proj + ".onrender.com"
+    live = "https://" + render_name + ".onrender.com"
     print("\n" + _B + "  Go live on Render (free, ~2 minutes):" + _X)
     print("    1. Visit https://render.com → sign in with GitHub")
     print("    2. Click New + → Web Service")
     print("    3. Connect repo: " + gh_user + "/" + gh_repo)
     print("    4. Render detects render.yaml → click Create Web Service")
     print("    5. Live at: " + _G + live + _X)
+    print(_Y + "    Note: URL is always lowercase with hyphens — Render ignores case/underscores." + _X)
     print("\n  Test once deployed:")
     print("    curl " + live + "/health")
     _ok("Render setup complete — finish in the Render dashboard")
