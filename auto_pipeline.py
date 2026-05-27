@@ -1069,7 +1069,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
 
     theme    = _detect_domain(dataset_filename, num_feats + cat_feats, project_name)
     title    = project_name.replace("-", " ").replace("_", " ").title()
-    icon     = theme["icon"]
+    icon     = theme.get("icon", "")
     desc     = theme["desc"]
     primary  = theme["primary"]
     accent   = theme["accent"]
