@@ -1,0 +1,98 @@
+# Changelog
+
+## v1.1.0 — Dynamic Image-Themed Frontend (2026-05-27)
+
+### Summary
+The generated `index.html` prediction UI now automatically picks a **background image and color palette** that match the dataset — no hardcoded images or fixed themes.
+
+---
+
+### What changed
+
+#### `auto_pipeline.py` and `bootstrap.py` (embedded `FILES["auto_pipeline.py"]`)
+
+Both files share the same `_detect_domain` and `_generate_frontend` functions. Both were updated identically.
+
+##### `_detect_domain` — expanded from 10 to 16 domains + smart generic fallback
+
+| Domain | Keywords (sample) | Icon | New? |
+|---|---|---|---|
+| 🌸 Botanical | iris, sepal, petal, setosa, versicolor | 🌸 | ✅ New |
+| 🩺 Health | glucose, diabetes, cancer, patient | 🩺 | Updated |
+| ✈️ Aviation | flight, airline, airport, departure | ✈️ | Updated |
+| 💰 Finance | loan, credit, fraud, stock, revenue | 💰 | Updated |
+| 🚢 Shipping | cargo, freight, container, vessel | 🚢 | Updated |
+| 🏠 Real Estate | house, sqft, bedroom, property | 🏠 | Updated |
+| 👤 HR Analytics | employee, attrition, performance | 👤 | Updated |
+| 🍷 Quality | wine, acidity, sulphates, density | 🍷 | Updated |
+| ⚓ Maritime | titanic, survived, pclass, embarked | ⚓ | Updated |
+| 🛒 Retail | customer, purchase, sales, cart | 🛒 | Updated |
+| ⚡ Energy | solar, wind, co2, renewable | ⚡ | Updated |
+| 🚗 Automotive | car, vehicle, horsepower, mpg | 🚗 | ✅ New |
+| 🌾 Agriculture | crop, soil, rainfall, nitrogen | 🌾 | ✅ New |
+| 🔒 Cybersecurity | attack, malware, intrusion, network | 🔒 | ✅ New |
+| 🎓 Education | student, grade, exam, gpa | 🎓 | ✅ New |
+| 🏆 Sports | game, team, win, league, score | 🏆 | ✅ New |
+
+Each domain now has two new fields:
+- **`img_keywords`** — search terms sent to Unsplash (e.g. `"iris flowers purple nature garden botanical"`)
+- **`img_overlay`** — semi-transparent RGBA gradient layered on top of the photo so text is always readable
+
+##### Generic fallback — now derives keywords from actual column names
+
+Before: always showed the same generic blue/robot theme.
+
+After: extracts meaningful words from the dataset filename, project name, and column names (stripping stop-words and short tokens). For example:
+- `cars_data.csv` + columns `["make", "model", "mileage"]` → query `"make model mileage"` → relevant car photos
+- `dataset.csv` + columns `["x1", "x2", "y"]` → query `"dataset experiment"` → abstract/data imagery
+
+##### `_generate_frontend` — live Unsplash background image
+
+New code block added after theme extraction:
+
+```python
+import urllib.parse as _urlparse
+_img_kw      = theme.get("img_keywords", "")
+_img_overlay = theme.get("img_overlay", gradient)
+if _img_kw:
+    _encoded  = _urlparse.quote(_img_kw)
+    _img_url  = f"https://source.unsplash.com/featured/1400x560?{_encoded}"
+    header_bg = f"{_img_overlay}, url('{_img_url}') center / cover no-repeat"
+else:
+    header_bg = gradient
+```
+
+The Unsplash Source endpoint (`source.unsplash.com/featured/...`) requires no API key and returns contextually relevant photos for any keyword query.
+
+##### CSS changes in generated `index.html`
+
+| Element | Before | After |
+|---|---|---|
+| `.hdr background` | `TMPL_GRADIENT` (solid gradient) | `TMPL_HEADER_BG` (overlay + photo URL) |
+| `.hdr` | No `background-size`, no `position` | `background-size: cover; background-position: center; position: relative` |
+| `.hdr h1` | No text shadow | `text-shadow: 0 2px 8px rgba(0,0,0,0.35)` |
+| `.hdr p` | `opacity: 0.82` | `opacity: 0.90; text-shadow: 0 1px 4px rgba(0,0,0,0.30)` |
+| Placeholder | `TMPL_GRADIENT` | `TMPL_HEADER_BG` |
+
+---
+
+### Examples
+
+| Dataset | Theme | Background image query |
+|---|---|---|
+| `Iris.csv` | 🌸 Botanical (`#4a1942` purple / `#f3e5f5` lavender) | `iris flowers purple nature garden botanical` |
+| `titanic.csv` | ⚓ Maritime (`#0d47a1` navy / `#e3f2fd` sky blue) | `ocean ship sea storm waves dramatic` |
+| `diabetes.csv` | 🩺 Health (`#0d6e6e` teal / `#f0faf9` mint) | `hospital medical doctor healthcare stethoscope` |
+| `cars_data.csv` | 🚗 Automotive (`#37474f` slate / `#eceff1` light grey) | `car automobile vehicle road speed` |
+| `housing.csv` | 🏠 Real Estate (`#5d4037` brown / `#fbe9e7` warm cream) | `house suburb real estate property architecture` |
+| `mystery.csv` (no match) | 🤖 ML (derived) | keywords extracted from column names |
+
+---
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `auto_pipeline.py` | `_detect_domain` expanded; `_generate_frontend` updated |
+| `bootstrap.py` | Same changes inside embedded `FILES["auto_pipeline.py"]` string |
+| `docs/changelog.md` | This file (new) |

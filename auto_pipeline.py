@@ -710,9 +710,13 @@ def _get_features(pipeline):
 def _detect_domain(dataset_filename, column_names, project_name=""):
     """
     Dynamically detect dataset domain from filename, column names, and project name.
-    Returns a theme dict with colors, gradient, icon, and description.
+    Returns a theme dict with colors, gradient, icon, description, img_overlay, and
+    img_keywords.  img_keywords drive a live Unsplash image URL so every dataset
+    gets a contextually relevant, unique background photo — not a hardcoded image.
+    For unknown datasets, keywords are derived directly from the column names so
+    even completely novel data gets a sensible visual theme.
     Scores each known domain by counting keyword matches in the combined text.
-    Falls back to a clean generic theme when nothing matches.
+    Falls back to a smart generic theme when nothing matches.
     """
     def _norm(s):
         return str(s).lower().replace("_", " ").replace("-", " ")
@@ -722,7 +726,22 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
         + [_norm(c) for c in column_names]
     )
 
+    # img_overlay : semi-transparent gradient layered ON TOP of the photo so
+    #               text stays readable no matter what the image looks like.
+    # img_keywords: free-text query sent to Unsplash — vivid, on-theme terms
+    #               chosen to consistently return strong, relevant photos.
     domains = [
+        (
+            ["iris", "sepal", "petal", "setosa", "versicolor", "virginica",
+             "flower", "species", "botanical", "petal length", "petal width"],
+            {"icon": "🌸", "name": "Botanical",
+             "primary": "#4a1942", "accent": "#9c27b0",
+             "btn": "#7b1fa2", "btn_hover": "#4a1942", "body_bg": "#f3e5f5",
+             "gradient": "linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(46,125,50,0.78) 0%,rgba(27,94,32,0.78) 100%)",
+             "img_keywords": "iris flowers purple nature garden botanical",
+             "desc": "AI-powered botanical species classification"},
+        ),
         (
             ["glucose", "insulin", "bmi", "blood", "diabetes", "cancer", "heart",
              "cholesterol", "medical", "health", "patient", "clinical", "disease",
@@ -731,24 +750,31 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
              "primary": "#0d6e6e", "accent": "#00897b",
              "btn": "#00897b", "btn_hover": "#00695c", "body_bg": "#f0faf9",
              "gradient": "linear-gradient(135deg, #0d6e6e 0%, #004d40 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(13,110,110,0.80) 0%,rgba(0,77,64,0.80) 100%)",
+             "img_keywords": "hospital medical doctor healthcare stethoscope",
              "desc": "AI-powered health risk assessment"},
         ),
         (
-            ["flight", "airline", "delay", "airport", "passenger", "departure",
-             "arrival", "route", "travel", "ticket", "cabin", "seat", "boarding"],
-            {"icon": "✈️", "name": "Travel",
+            ["flight", "airline", "delay", "airport", "departure",
+             "arrival", "route", "travel", "boarding"],
+            {"icon": "✈️", "name": "Aviation",
              "primary": "#1565c0", "accent": "#1976d2",
              "btn": "#1976d2", "btn_hover": "#1565c0", "body_bg": "#e8f4fc",
              "gradient": "linear-gradient(135deg, #1565c0 0%, #0d47a1 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(21,101,192,0.78) 0%,rgba(13,71,161,0.78) 100%)",
+             "img_keywords": "airplane flying sky airport clouds",
              "desc": "AI-powered flight prediction"},
         ),
         (
             ["loan", "credit", "fraud", "income", "bank", "salary", "payment",
-             "default", "financial", "mortgage", "debt", "interest", "stock"],
+             "default", "financial", "mortgage", "debt", "interest", "stock",
+             "revenue", "profit", "market"],
             {"icon": "💰", "name": "Finance",
              "primary": "#1a237e", "accent": "#ffa000",
              "btn": "#ffa000", "btn_hover": "#f57f17", "body_bg": "#eef0fc",
              "gradient": "linear-gradient(135deg, #1a237e 0%, #283593 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(26,35,126,0.80) 0%,rgba(40,53,147,0.80) 100%)",
+             "img_keywords": "finance stock market trading currency banking",
              "desc": "AI-powered financial prediction"},
         ),
         (
@@ -758,24 +784,32 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
              "primary": "#1b4f72", "accent": "#2e86c1",
              "btn": "#2e86c1", "btn_hover": "#1b4f72", "body_bg": "#d6eaf8",
              "gradient": "linear-gradient(135deg, #1b4f72 0%, #154360 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(27,79,114,0.80) 0%,rgba(21,67,96,0.80) 100%)",
+             "img_keywords": "cargo ship port container freight ocean",
              "desc": "AI-powered logistics prediction"},
         ),
         (
             ["house", "sqft", "bedroom", "bathroom", "property", "rent",
-             "real estate", "floor", "garage", "neighborhood", "zip"],
+             "real estate", "floor", "garage", "neighborhood", "zip",
+             "price", "lot", "dwelling"],
             {"icon": "🏠", "name": "Real Estate",
              "primary": "#5d4037", "accent": "#e53935",
              "btn": "#e53935", "btn_hover": "#c62828", "body_bg": "#fbe9e7",
              "gradient": "linear-gradient(135deg, #5d4037 0%, #3e2723 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(93,64,55,0.80) 0%,rgba(62,39,35,0.80) 100%)",
+             "img_keywords": "house suburb real estate property architecture",
              "desc": "AI-powered property prediction"},
         ),
         (
             ["employee", "attrition", "department", "hire", "churn",
-             "satisfaction", "performance", "job", "tenure", "workforce"],
-            {"icon": "👤", "name": "HR",
+             "satisfaction", "performance", "job", "tenure", "workforce",
+             "promotion", "manager"],
+            {"icon": "👤", "name": "HR Analytics",
              "primary": "#4a148c", "accent": "#8e24aa",
              "btn": "#8e24aa", "btn_hover": "#6a1b9a", "body_bg": "#f5edf9",
              "gradient": "linear-gradient(135deg, #4a148c 0%, #311b92 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(74,20,140,0.80) 0%,rgba(49,27,146,0.80) 100%)",
+             "img_keywords": "office team corporate workplace people collaboration",
              "desc": "AI-powered people analytics"},
         ),
         (
@@ -785,23 +819,29 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
              "primary": "#880e4f", "accent": "#ad1457",
              "btn": "#ad1457", "btn_hover": "#880e4f", "body_bg": "#fce4ec",
              "gradient": "linear-gradient(135deg, #880e4f 0%, #4a148c 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(136,14,79,0.80) 0%,rgba(74,20,140,0.80) 100%)",
+             "img_keywords": "wine vineyard grapes winery red wine bottle",
              "desc": "AI-powered quality assessment"},
         ),
         (
-            ["titanic", "survived", "pclass", "embarked", "lifeboat"],
+            ["titanic", "survived", "pclass", "embarked", "lifeboat", "survival"],
             {"icon": "⚓", "name": "Maritime",
              "primary": "#0d47a1", "accent": "#1565c0",
              "btn": "#1565c0", "btn_hover": "#0d47a1", "body_bg": "#e3f2fd",
              "gradient": "linear-gradient(135deg, #0d47a1 0%, #01579b 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(13,71,161,0.78) 0%,rgba(1,87,155,0.78) 100%)",
+             "img_keywords": "ocean ship sea storm waves dramatic",
              "desc": "AI-powered survival prediction"},
         ),
         (
             ["customer", "churn", "product", "purchase", "review", "rating",
-             "sales", "retail", "cart", "discount", "conversion"],
+             "sales", "retail", "cart", "discount", "conversion", "order"],
             {"icon": "🛒", "name": "Retail",
              "primary": "#e65100", "accent": "#ef6c00",
              "btn": "#ef6c00", "btn_hover": "#e65100", "body_bg": "#fff3e0",
              "gradient": "linear-gradient(135deg, #e65100 0%, #bf360c 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(230,81,0,0.80) 0%,rgba(191,54,12,0.80) 100%)",
+             "img_keywords": "shopping retail store ecommerce market",
              "desc": "AI-powered customer prediction"},
         ),
         (
@@ -811,7 +851,64 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
              "primary": "#e65100", "accent": "#f57f17",
              "btn": "#f57f17", "btn_hover": "#e65100", "body_bg": "#fff8e1",
              "gradient": "linear-gradient(135deg, #f9a825 0%, #e65100 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(249,168,37,0.78) 0%,rgba(230,81,0,0.78) 100%)",
+             "img_keywords": "solar panels wind turbine renewable energy power",
              "desc": "AI-powered energy prediction"},
+        ),
+        (
+            ["car", "vehicle", "mileage", "engine", "horsepower", "mpg",
+             "cylinders", "transmission", "fuel", "auto"],
+            {"icon": "🚗", "name": "Automotive",
+             "primary": "#37474f", "accent": "#546e7a",
+             "btn": "#546e7a", "btn_hover": "#37474f", "body_bg": "#eceff1",
+             "gradient": "linear-gradient(135deg, #37474f 0%, #263238 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(55,71,79,0.80) 0%,rgba(38,50,56,0.80) 100%)",
+             "img_keywords": "car automobile vehicle road speed",
+             "desc": "AI-powered vehicle prediction"},
+        ),
+        (
+            ["crop", "soil", "rainfall", "humidity", "nitrogen", "phosphorus",
+             "potassium", "agriculture", "farm", "harvest", "yield"],
+            {"icon": "🌾", "name": "Agriculture",
+             "primary": "#33691e", "accent": "#558b2f",
+             "btn": "#558b2f", "btn_hover": "#33691e", "body_bg": "#f1f8e9",
+             "gradient": "linear-gradient(135deg, #33691e 0%, #1b5e20 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(51,105,30,0.80) 0%,rgba(27,94,32,0.80) 100%)",
+             "img_keywords": "farm field crops agriculture harvest wheat",
+             "desc": "AI-powered crop prediction"},
+        ),
+        (
+            ["attack", "threat", "malware", "intrusion", "network", "packet",
+             "protocol", "firewall", "vulnerability", "exploit", "cyber"],
+            {"icon": "🔒", "name": "Cybersecurity",
+             "primary": "#1a1a2e", "accent": "#00e676",
+             "btn": "#00c853", "btn_hover": "#1a1a2e", "body_bg": "#e8f5e9",
+             "gradient": "linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(26,26,46,0.82) 0%,rgba(13,13,26,0.82) 100%)",
+             "img_keywords": "cybersecurity network digital hacker binary code",
+             "desc": "AI-powered security threat detection"},
+        ),
+        (
+            ["student", "grade", "score", "exam", "pass", "fail", "gpa",
+             "attendance", "education", "school", "university", "course"],
+            {"icon": "🎓", "name": "Education",
+             "primary": "#1565c0", "accent": "#42a5f5",
+             "btn": "#1976d2", "btn_hover": "#0d47a1", "body_bg": "#e3f2fd",
+             "gradient": "linear-gradient(135deg, #1565c0 0%, #0d47a1 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(21,101,192,0.80) 0%,rgba(13,71,161,0.80) 100%)",
+             "img_keywords": "university education students graduation campus",
+             "desc": "AI-powered academic performance prediction"},
+        ),
+        (
+            ["game", "score", "player", "team", "win", "loss", "sport",
+             "match", "goal", "point", "season", "league", "tournament"],
+            {"icon": "🏆", "name": "Sports",
+             "primary": "#1b5e20", "accent": "#43a047",
+             "btn": "#388e3c", "btn_hover": "#1b5e20", "body_bg": "#e8f5e9",
+             "gradient": "linear-gradient(135deg, #1b5e20 0%, #004d00 100%)",
+             "img_overlay": "linear-gradient(135deg,rgba(27,94,32,0.80) 0%,rgba(0,77,0,0.80) 100%)",
+             "img_keywords": "sports stadium competition victory trophy athletics",
+             "desc": "AI-powered sports performance prediction"},
         ),
     ]
 
@@ -823,15 +920,37 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
             best_theme = theme
 
     if best_theme is None or best_score == 0:
+        # ── Fully generic fallback: derive image keywords from the actual column
+        # names and filename so even completely novel datasets get a relevant image.
+        stop_words = {"id", "no", "num", "the", "and", "for", "with", "from",
+                      "this", "that", "have", "data", "value", "label", "class",
+                      "target", "output", "result", "flag", "code", "type"}
+        raw_words = []
+        for token in ([dataset_filename, project_name] + list(column_names)):
+            for w in _norm(token).split():
+                if len(w) > 3 and w not in stop_words:
+                    raw_words.append(w)
+        seen, img_kws = set(), []
+        for w in raw_words:
+            if w not in seen:
+                seen.add(w)
+                img_kws.append(w)
+            if len(img_kws) == 4:
+                break
+        derived_query = " ".join(img_kws) if img_kws else "data science technology abstract"
+
         best_theme = {
             "icon": "🤖", "name": "ML",
             "primary": "#1e3a5f", "accent": "#1a73e8",
             "btn": "#1a73e8", "btn_hover": "#1558d6", "body_bg": "#eef2ff",
             "gradient": "linear-gradient(135deg, #1e3a5f 0%, #0d2137 100%)",
+            "img_overlay": "linear-gradient(135deg,rgba(30,58,95,0.80) 0%,rgba(13,33,55,0.80) 100%)",
+            "img_keywords": derived_query,
             "desc": "AI-powered prediction",
         }
 
     return best_theme
+
 
 
 def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder=None):
@@ -862,6 +981,26 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
     btn_hover = theme["btn_hover"]
     body_bg  = theme["body_bg"]
     gradient = theme["gradient"]
+
+    # ── Build dynamic background image URL ────────────────────────────────
+    # Unsplash's source endpoint returns a contextually relevant photo for any
+    # free-text query — no API key required.  The semi-transparent img_overlay
+    # gradient sits on top so text stays readable no matter what photo loads.
+    try:
+        import urllib.parse as _urlparse
+        _img_kw      = theme.get("img_keywords", "")
+        _img_overlay = theme.get("img_overlay", gradient)
+        if _img_kw:
+            _encoded  = _urlparse.quote(_img_kw)
+            _img_url  = f"https://source.unsplash.com/featured/1400x560?{_encoded}"
+            header_bg = f"{_img_overlay}, url('{_img_url}') center / cover no-repeat"
+        else:
+            header_bg = gradient
+    except Exception:
+        header_bg = gradient
+
+    _ok(f"Theme  : {theme['name']}  {icon}  |  image query: \"{theme.get('img_keywords','')}\"")
+    _ok(f"Colors : primary={primary}  accent={accent}  body={body_bg}")
 
     is_class_js = "true" if task_type == "classification" else "false"
     classes_js  = str(classes).replace("'", '"')          # valid JS array literal
@@ -909,12 +1048,16 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '    }\n'
         '    /* Header */\n'
         '    .hdr {\n'
-        '      background: TMPL_GRADIENT; color: white;\n'
+        '      background: TMPL_HEADER_BG;\n'
+        '      background-size: cover;\n'
+        '      background-position: center;\n'
+        '      color: white;\n'
         '      padding: 52px 24px 44px; text-align: center;\n'
+        '      position: relative;\n'
         '    }\n'
         '    .hdr-icon { font-size: 58px; display: block; margin-bottom: 14px; }\n'
-        '    .hdr h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.5px; }\n'
-        '    .hdr p  { opacity: 0.82; margin-top: 8px; font-size: 1.05rem; }\n'
+        '    .hdr h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.5px; text-shadow: 0 2px 8px rgba(0,0,0,0.35); }\n'
+        '    .hdr p  { opacity: 0.90; margin-top: 8px; font-size: 1.05rem; text-shadow: 0 1px 4px rgba(0,0,0,0.30); }\n'
         '    /* Container */\n'
         '    .ctr { max-width: 880px; margin: 0 auto; padding: 36px 20px 64px; }\n'
         '    /* Card */\n'
@@ -1120,7 +1263,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
     # partial replacements (e.g. TMPL_BTN_HOVER before TMPL_BTN).
     accent_alpha = accent + "33"          # hex + 20% alpha for focus ring
     replacements = [
-        ("TMPL_GRADIENT",    gradient),
+        ("TMPL_HEADER_BG",   header_bg),
         ("TMPL_BTN_HOVER",   btn_hover),
         ("TMPL_BTN",         btn),
         ("TMPL_BODY_BG",     body_bg),
