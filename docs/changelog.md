@@ -1,5 +1,93 @@
 # Changelog
 
+## v1.3.0 — Pure-CSS Mesh Gradient Themes, Zero External Images (2026-05-27)
+
+### Summary
+Removed all external image dependencies (Unsplash, loremflickr). Every dataset theme is now a **pure-CSS mesh gradient** — layered `radial-gradient` colour spots over a `linear-gradient` base — crafted specifically for each domain. Zero HTTP requests for the header background; works offline; loads instantly.
+
+---
+
+### Why
+
+| Before | Problem |
+|---|---|
+| `source.unsplash.com` (v1.1.x) | Shut down — returns HTTP 503 |
+| `loremflickr.com` (v1.2.0) | Random CC photos: irrelevant, low-quality, external dependency |
+
+Pure CSS is faster, more reliable, visually on-brand, and never shows an irrelevant stock photo.
+
+### What changed
+
+#### `header_pattern` replaces `img_keywords` + `img_overlay`
+
+Each domain theme now carries a single `header_pattern` key — a CSS `background` property value built from:
+
+```
+radial-gradient(ellipse at X% Y%, rgba(R,G,B,α) 0%, transparent N%),   ← colour spot 1
+radial-gradient(ellipse at X% Y%, rgba(R,G,B,α) 0%, transparent N%),   ← colour spot 2
+radial-gradient(ellipse at X% Y%, rgba(R,G,B,α) 0%, transparent N%),   ← colour spot 3
+linear-gradient(Adeg, #colour1 0%, #colour2 50%, #colour3 100%)         ← base tone
+```
+
+The radial spots are positioned and coloured to evoke each domain's real-world context:
+
+| Domain | Visual personality |
+|---|---|
+| 🌸 Botanical | Purple bloom at bottom-left, green canopy top-right |
+| 🩺 Health | Dual teal spotlights, clinical depth |
+| ✈️ Aviation | White cloud wisps on sky-blue diagonal |
+| 💰 Finance | Warm gold corners over deep navy |
+| 🚢 Shipping | Ocean depth rising from bottom |
+| 🏠 Real Estate | Warm red ember top-right, earth tones |
+| 👤 HR | Dual purple spotlights, professional |
+| 🍷 Quality | Crimson/wine diagonal spotlight |
+| ⚓ Maritime | Navy depth with blue horizon glow |
+| 🛒 Retail | Warm orange dual spots |
+| ⚡ Energy | Solar yellow top, ember orange base |
+| 🚗 Automotive | Cool steel side-lights |
+| 🌾 Agriculture | Earth-green rising from horizon |
+| 🔒 Cybersecurity | Dark matrix with green pulse glow |
+| 🎓 Education | Academic blue diagonal |
+| 🏆 Sports | Turf-green stadium lighting |
+| 🛡️ Insurance | Navy with electric-blue shield glow |
+| 📦 Supply Chain | Amber warmth on dark earth |
+| 💬 NLP | Electric purple dual diagonal spots |
+
+#### Generic fallback — unique colour per dataset
+
+Unknown datasets get a `hsla(hue, ...)` radial gradient where `hue` is derived from `hash(column_names)` — so every novel dataset gets a unique, **deterministic** colour that stays the same every time it's run.
+
+#### `_generate_frontend` simplified
+
+Before (14 lines):
+```python
+try:
+    import urllib.parse as _urlparse
+    _img_kw = theme.get("img_keywords", "")
+    ...
+    _img_url = f"https://loremflickr.com/1400/560/{_kw_csv}"
+    header_bg = f"{_img_overlay}, url('{_img_url}') center / cover no-repeat"
+except Exception:
+    header_bg = gradient
+```
+
+After (1 line):
+```python
+header_bg = theme.get("header_pattern", gradient)
+```
+
+---
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `auto_pipeline.py` | `_detect_domain` rewritten with `header_pattern`; `_generate_frontend` simplified |
+| `bootstrap.py` | Identical changes inside embedded `FILES["auto_pipeline.py"]` string |
+| `docs/changelog.md` | This entry |
+
+---
+
 ## v1.2.0 — Real Background Photos + Cold-Start Fix + 19 Domains (2026-05-27)
 
 ### Summary
