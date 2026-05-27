@@ -2939,15 +2939,23 @@ print(f"  {G}✔ Dependencies installed{X}")
 print(f"\n{G}▶ Creating project at: {project_dir}{X}")
 shutil.move(str(staging_dir), str(project_dir))
 
-# Fix .venv shebangs after path changed
-try:
-    subprocess.run([sys.executable, "-m", "venv", "--upgrade", str(project_dir / ".venv")],
-                   check=True, capture_output=True)
-except Exception:
+# Fix .venv shebangs — rewrite every script in .venv/bin/ that has a
+# shebang pointing to the old staging path, replacing it with the real path.
+_venv_bin = project_dir / ".venv" / "bin"
+_venv_python = str(_venv_bin / "python")
+_bad_prefix  = str(staging_dir)   # staging_dir was moved, so this path is gone
+for _script in _venv_bin.iterdir():
     try:
-        subprocess.run([str(project_dir / ".venv" / "bin" / "python"),
-                        "-m", "pip", "install", "pip", "-q"],
-                       check=False, capture_output=True)
+        if not _script.is_file() or _script.is_symlink():
+            continue
+        raw = _script.read_bytes()
+        if not raw.startswith(b"#!"):
+            continue
+        first_nl = raw.index(b"\n")
+        shebang = raw[:first_nl].decode("utf-8", errors="replace")
+        if _bad_prefix in shebang:
+            new_shebang = ("#!" + _venv_python).encode("utf-8")
+            _script.write_bytes(new_shebang + raw[first_nl:])
     except Exception:
         pass
 
