@@ -3,6 +3,13 @@
 run_e2e.py — End-to-End Test Suite for ML Pipeline Template
 Tests the full flow: bootstrap → pipeline → API → Docker (optional)
 
+Suites and approximate check counts:
+  Suite 1 — Bootstrap & Project Creation    (~11 checks)
+  Suite 2 — Pipeline Artifacts              (~13 checks)
+  Suite 3 — App & Dockerfile Generation     (~26 checks)  includes frontend/CORS
+  Suite 4 — API Endpoints (live server)     (~20 checks)  includes GET / HTML
+  Suite 5 — Docker Build & Smoke Test       (~10 checks)  includes GET / in Docker
+
 Usage (from repo root):
   python3 tests/run_e2e.py              # all suites
   python3 tests/run_e2e.py --fast       # skip Docker suite (~5 min faster)
@@ -283,6 +290,29 @@ exec(open("auto_pipeline.py").read().split("# ════")[0])   # load global
         check(3, ".dockerignore excludes .venv/",  ".venv/" in content)
         check(3, ".dockerignore excludes data/",   "data/" in content)
 
+    # 3.5 index.html — auto-themed prediction UI
+    index_html = proj / "index.html"
+    check(3, "index.html generated", index_html.exists() and index_html.stat().st_size > 0)
+    if index_html.exists():
+        html = index_html.read_text(encoding="utf-8")
+        check(3, "index.html has no raw TMPL_ placeholders",
+              "TMPL_" not in html, "found unsubstituted TMPL_ token(s)")
+        check(3, "index.html contains <html tag",       "<html" in html.lower())
+        check(3, "index.html contains a <form element", "<form" in html.lower())
+        check(3, "index.html has themed CSS gradient",  "gradient" in html.lower())
+
+    # 3.6 app.py — CORS middleware and GET / (frontend route)
+    if app_py.exists():
+        content = app_py.read_text()
+        check(3, "app.py imports FileResponse",   "FileResponse" in content)
+        check(3, "app.py imports CORSMiddleware", "CORSMiddleware" in content)
+        check(3, 'app.py has GET / route',        '@app.get("/")' in content)
+
+    # 3.7 Dockerfile — copies index.html into image
+    if dockerfile.exists():
+        content = dockerfile.read_text()
+        check(3, "Dockerfile copies index.html*", "index.html" in content)
+
 
 # ════════════════════════════════════════════════════════════════════
 # Suite 4 — API Endpoints (live server)
@@ -392,6 +422,24 @@ def suite_4_api(proj):
         status, _ = post("/predict", {"bad_field": "nonsense"})
         check(4, "POST /predict invalid payload returns prediction (imputes missing)", status == 200)
 
+        # 4.9 GET / — themed prediction UI (index.html served at root)
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/", timeout=10
+            ) as resp:
+                fe_status = resp.status
+                fe_ctype  = resp.headers.get("Content-Type", "")
+                fe_body   = resp.read().decode("utf-8", errors="replace")
+        except Exception as exc:
+            fe_status = 0
+            fe_ctype  = ""
+            fe_body   = str(exc)
+        check(4, "GET / returns 200",              fe_status == 200, f"got {fe_status}")
+        check(4, "GET / Content-Type is text/html",
+              "text/html" in fe_ctype, f"got '{fe_ctype}'")
+        check(4, "GET / body contains <html tag",  "<html" in fe_body.lower(),
+              fe_body[:120] if fe_body else "empty")
+
     finally:
         # Stop server
         proc.terminate()
@@ -485,6 +533,21 @@ def suite_5_docker(proj):
         preds = body.get("predictions", [])
         check(5, "POST /predict/batch inside Docker correct results", preds == ["1", "0"],
               f"got {preds}")
+
+        # 5.4 GET / inside Docker — themed UI served at root
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/", timeout=10
+            ) as resp:
+                docker_fe_status = resp.status
+                docker_fe_body   = resp.read().decode("utf-8", errors="replace")
+        except Exception as exc:
+            docker_fe_status = 0
+            docker_fe_body   = str(exc)
+        check(5, "GET / inside Docker returns 200",
+              docker_fe_status == 200, f"got {docker_fe_status}")
+        check(5, "GET / inside Docker serves index.html",
+              "<html" in docker_fe_body.lower(), docker_fe_body[:80] if docker_fe_body else "empty")
 
     finally:
         run(["docker", "stop", container])
