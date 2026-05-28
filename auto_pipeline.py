@@ -1179,7 +1179,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
             '\n          <div>'
             '\n            <label class="inp-lbl">' + lbl + '</label>'
             '\n            <input type="number" name="' + feat + '" class="inp"'
-            ' placeholder="e.g. 0" step="any">'
+            ' placeholder="e.g. 0" step="any" min="0">'
             '\n          </div>'
         )
     for feat in cat_feats:
@@ -1600,9 +1600,9 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '      var msg = err.message || String(err);\n'
         '      if (msg.indexOf(\'Failed to fetch\') !== -1 || msg.indexOf(\'NetworkError\') !== -1\n'
         '          || msg.indexOf(\'ERR_CONNECTION_REFUSED\') !== -1 || err instanceof TypeError) {\n'
-        '        msg = \'⚠ Cannot reach the API server.\\nMake sure uvicorn is running:\\n    uvicorn app:app --reload\';\n'
-        '        srvDot.className = \'srv-dot offline\';\n'
-        '        srvTxt.textContent = \'Server offline\';\n'
+        '        msg = \'⚠ Cannot reach the API server.\\nThe server may have gone to sleep — please wait a moment.\';\n'
+        '        setServerState(\'offline\', \'Server offline — retrying…\');\n'
+        '        if (!_healthTimer) _healthTimer = setInterval(checkServer, 5000);\n'
         '      }\n'
         '      showError(msg);\n'
         '    })\n'
