@@ -1179,7 +1179,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
             '\n          <div>'
             '\n            <label class="inp-lbl">' + lbl + '</label>'
             '\n            <input type="number" name="' + feat + '" class="inp"'
-            ' placeholder="e.g. 0" step="any" min="0">'
+            ' placeholder="e.g. 0" step="any" min="0" required>'
             '\n          </div>'
         )
     for feat in cat_feats:
@@ -1190,7 +1190,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
             '\n          <div>'
             '\n            <label class="inp-lbl">' + lbl + '</label>'
             '\n            <input type="text" name="' + feat + '" class="inp"'
-            ' placeholder="Enter value">'
+            ' placeholder="Enter value" required>'
             '\n          </div>'
         )
 
@@ -1577,6 +1577,10 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '        summary.push([lbl, v]);\n'
         '      }\n'
         '    });\n'
+        '    if (Object.keys(payload).length === 0) {\n'
+        '      showError(\'Please fill in at least one field before predicting.\');\n'
+        '      return;\n'
+        '    }\n'
         '\n'
         '    pBtn.disabled = true;\n'
         '    btnTxt.innerHTML = \'<span class="spinner"></span>Predicting…\';\n'
