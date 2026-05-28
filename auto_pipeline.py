@@ -1359,7 +1359,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '    var payload = {};\n'
         '    form.querySelectorAll("input").forEach(function(el) {\n'
         '      var v = el.value.trim();\n'
-        '      if (v !== "") payload[el.name] = isNaN(v) ? v : parseFloat(v);\n'
+        '      if (v !== "") payload[el.name] = (el.type === "number" && !isNaN(v)) ? parseFloat(v) : v;\n'
         '    });\n'
         '\n'
         '    pBtn.disabled = true;\n'
