@@ -2152,6 +2152,38 @@ def _get_features(pipeline):
     return num_feats, cat_feats
 
 
+
+def _fetch_unsplash_photo(search_query, fallback_url):
+    """
+    Return a photo URL for the given search query.
+
+    Calls the Unsplash Search API when UNSPLASH_ACCESS_KEY is set in the
+    environment (Unsplash free tier: 50 req / hr, takes ~2 min to register).
+    Always picks the top result so the same domain always gets the same photo
+    (deterministic).  Falls back silently to fallback_url on any error or when
+    the key is absent — zero friction for users who haven't set the key.
+    """
+    import urllib.request, urllib.parse as _urlparse
+    key = os.environ.get("UNSPLASH_ACCESS_KEY", "").strip()
+    if not key:
+        return fallback_url
+    try:
+        q = _urlparse.quote_plus(search_query)
+        req = urllib.request.Request(
+            f"https://api.unsplash.com/search/photos?query={q}&per_page=1&orientation=landscape",
+            headers={"Authorization": f"Client-ID {key}", "Accept-Version": "v1"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        results = data.get("results", [])
+        if results:
+            raw = results[0]["urls"]["raw"]
+            return raw + "&w=1400&h=560&fit=crop&auto=format&q=85"
+    except Exception:
+        pass
+    return fallback_url
+
+
 def _detect_domain(dataset_filename, column_names, project_name=""):
     """
     Dynamically detect dataset domain from filename, column names, and project name.
@@ -2193,7 +2225,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(46,125,50,.65) 0%,rgba(74,20,140,.70) 100%),"
                  f"url('{_UP}/photo-1462275646964-a0e3386b89fa{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered botanical species classification"},
+                          "search_q": "botanical wildflowers flowers nature",
+"desc": "AI-powered botanical species classification"},
         ),
         # ── Health ───────────────────────────────────────────────────────────
         (
@@ -2208,7 +2241,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(13,110,110,.62) 0%,rgba(0,77,64,.68) 100%),"
                  f"url('{_UP}/photo-1576091160399-112ba8d25d1d{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered health risk assessment"},
+                          "search_q": "hospital medical healthcare clinical",
+"desc": "AI-powered health risk assessment"},
         ),
         # ── Aviation ─────────────────────────────────────────────────────────
         (
@@ -2222,7 +2256,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(13,71,161,.60) 0%,rgba(21,101,192,.55) 100%),"
                  f"url('{_UP}/photo-1436491865332-7a61a109cc05{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered flight prediction"},
+                          "search_q": "airplane flight sky clouds",
+"desc": "AI-powered flight prediction"},
         ),
         # ── Finance ──────────────────────────────────────────────────────────
         (
@@ -2237,7 +2272,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(26,35,126,.68) 0%,rgba(40,53,147,.62) 100%),"
                  f"url('{_UP}/photo-1611974789855-9c2a0a7236a3{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered financial prediction"},
+                          "search_q": "stock market finance trading charts",
+"desc": "AI-powered financial prediction"},
         ),
         # ── Shipping ─────────────────────────────────────────────────────────
         (
@@ -2251,7 +2287,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(27,79,114,.65) 0%,rgba(21,67,96,.70) 100%),"
                  f"url('{_UP}/photo-1494412651409-8963ce7935a7{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered logistics prediction"},
+                          "search_q": "cargo ship port container logistics",
+"desc": "AI-powered logistics prediction"},
         ),
         # ── Real Estate ──────────────────────────────────────────────────────
         (
@@ -2266,7 +2303,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(93,64,55,.62) 0%,rgba(62,39,35,.68) 100%),"
                  f"url('{_UP}/photo-1568605114967-8130f3a36994{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered property prediction"},
+                          "search_q": "house property real estate architecture",
+"desc": "AI-powered property prediction"},
         ),
         # ── HR Analytics ─────────────────────────────────────────────────────
         (
@@ -2281,7 +2319,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(74,20,140,.60) 0%,rgba(49,27,146,.65) 100%),"
                  f"url('{_UP}/photo-1522202176988-66273c2fd55f{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered people analytics"},
+                          "search_q": "team office workplace people collaboration",
+"desc": "AI-powered people analytics"},
         ),
         # ── Quality / Wine ────────────────────────────────────────────────────
         (
@@ -2295,7 +2334,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(136,14,79,.65) 0%,rgba(74,20,140,.68) 100%),"
                  f"url('{_UP}/photo-1510812431401-41d2bd2722f3{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered quality assessment"},
+                          "search_q": "wine glasses winery vineyard",
+"desc": "AI-powered quality assessment"},
         ),
         # ── Maritime ─────────────────────────────────────────────────────────
         (
@@ -2308,7 +2348,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(13,71,161,.58) 0%,rgba(1,87,155,.65) 100%),"
                  f"url('{_UP}/photo-1507525428034-b723cf961d3e{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered survival prediction"},
+                          "search_q": "ocean sea waves beach",
+"desc": "AI-powered survival prediction"},
         ),
         # ── Retail ───────────────────────────────────────────────────────────
         (
@@ -2322,7 +2363,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(230,81,0,.62) 0%,rgba(191,54,12,.68) 100%),"
                  f"url('{_UP}/photo-1441986300917-64674bd600d8{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered customer prediction"},
+                          "search_q": "shopping mall retail store",
+"desc": "AI-powered customer prediction"},
         ),
         # ── Energy ───────────────────────────────────────────────────────────
         (
@@ -2336,7 +2378,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(249,168,37,.60) 0%,rgba(230,81,0,.68) 100%),"
                  f"url('{_UP}/photo-1509391366360-2e959784a276{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered energy prediction"},
+                          "search_q": "solar panels renewable energy",
+"desc": "AI-powered energy prediction"},
         ),
         # ── Automotive ───────────────────────────────────────────────────────
         (
@@ -2350,7 +2393,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(55,71,79,.62) 0%,rgba(38,50,56,.68) 100%),"
                  f"url('{_UP}/photo-1503376780353-7e6692767b70{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered vehicle prediction"},
+                          "search_q": "car vehicle highway road",
+"desc": "AI-powered vehicle prediction"},
         ),
         # ── Agriculture ──────────────────────────────────────────────────────
         (
@@ -2364,7 +2408,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(51,105,30,.60) 0%,rgba(27,94,32,.65) 100%),"
                  f"url('{_UP}/photo-1500382017468-9049fed747ef{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered crop prediction"},
+                          "search_q": "wheat field farm harvest golden",
+"desc": "AI-powered crop prediction"},
         ),
         # ── Cybersecurity ────────────────────────────────────────────────────
         (
@@ -2378,7 +2423,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(26,26,46,.72) 0%,rgba(13,13,26,.78) 100%),"
                  f"url('{_UP}/photo-1550751827-4bd374c3f58b{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered security threat detection"},
+                          "search_q": "cybersecurity digital network security code",
+"desc": "AI-powered security threat detection"},
         ),
         # ── Education ────────────────────────────────────────────────────────
         (
@@ -2392,7 +2438,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(21,101,192,.62) 0%,rgba(13,71,161,.68) 100%),"
                  f"url('{_UP}/photo-1562774053-701939374585{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered academic performance prediction"},
+                          "search_q": "university campus students library",
+"desc": "AI-powered academic performance prediction"},
         ),
         # ── Sports ───────────────────────────────────────────────────────────
         (
@@ -2406,7 +2453,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(27,94,32,.60) 0%,rgba(0,77,0,.65) 100%),"
                  f"url('{_UP}/photo-1461896836934-ffe607ba8211{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered sports performance prediction"},
+                          "search_q": "stadium sports crowd arena",
+"desc": "AI-powered sports performance prediction"},
         ),
         # ── Insurance ────────────────────────────────────────────────────────
         (
@@ -2421,7 +2469,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(26,60,94,.65) 0%,rgba(13,33,55,.70) 100%),"
                  f"url('{_UP}/photo-1560472354-b33ff0c44a43{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered insurance risk prediction"},
+                          "search_q": "protection safety shield security",
+"desc": "AI-powered insurance risk prediction"},
         ),
         # ── Supply Chain ─────────────────────────────────────────────────────
         (
@@ -2435,7 +2484,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(78,52,46,.65) 0%,rgba(62,39,35,.70) 100%),"
                  f"url('{_UP}/photo-1586528116311-ad8dd3c8310d{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered supply chain prediction"},
+                          "search_q": "warehouse logistics inventory shelves",
+"desc": "AI-powered supply chain prediction"},
         ),
         # ── NLP ──────────────────────────────────────────────────────────────
         (
@@ -2449,7 +2499,8 @@ def _detect_domain(dataset_filename, column_names, project_name=""):
                  f"linear-gradient(135deg,rgba(69,39,160,.68) 0%,rgba(49,27,146,.72) 100%),"
                  f"url('{_UP}/photo-1526374965328-7f61d4dc18c5{_Q}') center/cover no-repeat"
              ),
-             "desc": "AI-powered text analysis"},
+                          "search_q": "text code programming digital abstract",
+"desc": "AI-powered text analysis"},
         ),
     ]
 
@@ -2528,6 +2579,19 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
     # (radial colour spots + linear base) that look rich and unique with
     # zero external HTTP requests.  Falls back to the plain gradient if missing.
     header_bg = theme.get("header_pattern", gradient)
+
+    # Optional: replace header photo dynamically via Unsplash Search API.
+    # Set UNSPLASH_ACCESS_KEY env var once; pipeline auto-uses it every run.
+    # Falls back silently to the hardcoded curated photo when key is absent.
+    _sq = theme.get("search_q", "")
+    if _sq and "images.unsplash.com" in header_bg:
+        import re as _re
+        _m = _re.search(r"url\('(https://images\.unsplash\.com/[^']+)'\)", header_bg)
+        if _m:
+            _dyn = _fetch_unsplash_photo(_sq, _m.group(1))
+            if _dyn != _m.group(1):
+                header_bg = header_bg.replace(_m.group(1), _dyn)
+                _ok("Unsplash: dynamic photo fetched via API")
 
     _ok(f"Theme  : {theme['name']}  {icon}")
     _ok(f"Colors : primary={primary}  accent={accent}  body={body_bg}")
