@@ -2600,9 +2600,26 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
     classes_js  = str(classes).replace("'", '"')          # valid JS array literal
 
     # ── Build form fields (dark-glass inputs for Tailwind template) ───────────
+    import re as _re
+
+    def _fmt_label(name):
+        """Split camelCase and snake_case into a readable title label."""
+        s = _re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', name)
+        s = _re.sub(r'([a-z\d])([A-Z])', r'\1 \2', s)
+        return s.replace('_', ' ').replace('-', ' ').title()
+
+    _ID_COLS = {'id', 'index', 'serial', 'rowid', 'row', 'no', 'num',
+                'uuid', 'guid', 'pk', 'key', 'rid', 'sid'}
+
+    def _is_id_col(name):
+        n = _re.sub(r'[^a-z]', '', name.lower())
+        return n in _ID_COLS or (n.endswith('id') and len(n) <= 5)
+
     fields_html = ""
     for feat in num_feats:
-        lbl = feat.replace("_", " ").replace("-", " ").title()
+        if _is_id_col(feat):
+            continue
+        lbl = _fmt_label(feat)
         fields_html += (
             '\n          <div>'
             '\n            <label class="inp-lbl">' + lbl + '</label>'
@@ -2611,7 +2628,9 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
             '\n          </div>'
         )
     for feat in cat_feats:
-        lbl = feat.replace("_", " ").replace("-", " ").title()
+        if _is_id_col(feat):
+            continue
+        lbl = _fmt_label(feat)
         fields_html += (
             '\n          <div>'
             '\n            <label class="inp-lbl">' + lbl + '</label>'
@@ -2639,6 +2658,14 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
 
     # ── About-strip values ────────────────────────────────────────────────────
     domain_name   = theme["name"]
+    algo_str      = cfg.get("best_model", "—")
+    _acc          = cfg.get("test_accuracy")
+    accuracy_str  = (f"{_acc:.1%}" if _acc is not None else "—")
+    acc_color     = "#4ade80" if (_acc or 0) >= 0.9 else ("#facc15" if (_acc or 0) >= 0.7 else "#f87171")
+    algo_str      = cfg.get("best_model", "—")
+    _acc          = cfg.get("test_accuracy")
+    accuracy_str  = (f"{_acc:.1%}" if _acc is not None else "—")
+    acc_color     = "#4ade80" if (_acc or 0) >= 0.9 else ("#facc15" if (_acc or 0) >= 0.7 else "#f87171")
     task_label    = "Classification" if task_type == "classification" else "Regression"
     feat_count    = str(len(num_feats) + len(cat_feats))
     classes_count = str(len(classes)) if task_type == "classification" else "&mdash;"
@@ -2798,7 +2825,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '      <div style="max-width:1024px;margin:0 auto;padding:64px 24px;text-align:center;color:#fff">\n'
         '        <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:99px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(8px);font-size:.85rem;font-weight:600;margin-bottom:20px">\n'
         '          <span style="width:8px;height:8px;border-radius:50%;background:#4ade80;display:inline-block"></span>\n'
-        '          ML Model &nbsp;&middot;&nbsp; TMPL_DOMAIN_NAME\n'
+        '          TMPL_DOMAIN_NAME\n'
         '        </div>\n'
         '        <h1 class="hero-h1" style="font-size:2.8rem;font-weight:900;letter-spacing:-0.5px;margin-bottom:14px;text-shadow:0 2px 24px rgba(0,0,0,.55)">\n'
         '          TMPL_TITLE\n'
@@ -2827,7 +2854,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '            <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,TMPL_BTN,TMPL_ACCENT);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,.3)">⚗</div>\n'
         '            <div>\n'
         '              <div style="color:#fff;font-weight:700;font-size:1.05rem">Feature Inputs</div>\n'
-        '              <div style="color:rgba(255,255,255,.38);font-size:.82rem">Enter values to get a prediction</div>\n'
+        '              <div style="color:rgba(255,255,255,.38);font-size:.82rem">Enter your feature values below</div>\n'
         '            </div>\n'
         '          </div>\n'
         '\n'
@@ -2844,12 +2871,12 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '            <div style="color:rgba(255,255,255,.25);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">About this model</div>\n'
         '            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">\n'
         '              <div class="mini-stat">\n'
-        '                <div style="color:rgba(255,255,255,.35);font-size:.7rem;margin-bottom:4px">Task</div>\n'
-        '                <div style="color:#fff;font-weight:600;font-size:.82rem">TMPL_TASK</div>\n'
+        '                <div style="color:rgba(255,255,255,.35);font-size:.7rem;margin-bottom:4px">Algorithm</div>\n'
+        '                <div style="color:#fff;font-weight:600;font-size:.82rem">TMPL_ALGO</div>\n'
         '              </div>\n'
         '              <div class="mini-stat">\n'
-        '                <div style="color:rgba(255,255,255,.35);font-size:.7rem;margin-bottom:4px">Features</div>\n'
-        '                <div style="color:#fff;font-weight:600;font-size:.82rem">TMPL_FEAT_COUNT</div>\n'
+        '                <div style="color:rgba(255,255,255,.35);font-size:.7rem;margin-bottom:4px">Accuracy</div>\n'
+        '                <div style="color:TMPL_ACC_COLOR;font-weight:700;font-size:.82rem">TMPL_ACCURACY</div>\n'
         '              </div>\n'
         '              <div class="mini-stat">\n'
         '                <div style="color:rgba(255,255,255,.35);font-size:.7rem;margin-bottom:4px">Classes</div>\n'
@@ -3031,7 +3058,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '  });\n'
         '\n'
         '  function showResult(data, summary) {\n'
-        '    resVal.textContent = data.prediction;\n'
+        '    resVal.textContent = IS_CLASS ? _fmt(String(data.prediction)) : data.prediction;\n'
         '\n'
         '    if (IS_CLASS && data.probabilities) {\n'
         '      var probs  = Array.isArray(data.probabilities) ? data.probabilities : Object.values(data.probabilities);\n'
@@ -3044,6 +3071,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '      probBars.innerHTML = \'\';\n'
         '      var pairs = labels.map(function(l,i){ return {l:l, p:probs[i]||0}; })\n'
         '                        .sort(function(a,b){ return b.p - a.p; });\n'
+        '      function _fmt(s){return s.replace(/[-_]/g,\' \').replace(/\\b\\w/g,function(c){return c.toUpperCase();});}\n'
         '      pairs.forEach(function(item) {\n'
         '        var pct   = (item.p * 100).toFixed(1);\n'
         '        var isTop = item.p === maxP;\n'
@@ -3052,7 +3080,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '        d.innerHTML =\n'
         '          \'<div style="display:flex;justify-content:space-between;margin-bottom:5px">\' +\n'
         '            \'<span style="font-size:.85rem;font-weight:\' + (isTop ? \'600\' : \'400\') +\n'
-        '            \';color:rgba(255,255,255,\' + (isTop ? \'.9\' : \'.45\') + \')">\' + item.l + \'</span>\' +\n'
+        '            \';color:rgba(255,255,255,\' + (isTop ? \'.9\' : \'.45\') + \')">\' + _fmt(item.l) + \'</span>\' +\n'
         '            \'<span style="font-size:.85rem;font-weight:700;color:rgba(255,255,255,\' + (isTop ? \'.95\' : \'.35\') + \')">\' + pct + \'%</span>\' +\n'
         '          \'</div>\' +\n'
         '          \'<div class="conf-track"><div class="conf-fill" data-p="\' + pct + \'" style="width:0"></div></div>\';\n'
@@ -3112,10 +3140,11 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         ("TMPL_IS_CLASS",      is_class_js),
         ("TMPL_CLASSES_COUNT", classes_count),
         ("TMPL_CLASSES",       classes_js),
-        ("TMPL_FEAT_COUNT",    feat_count),
+        ("TMPL_ACCURACY",      accuracy_str),
+        ("TMPL_ACC_COLOR",     acc_color),
+        ("TMPL_ALGO",          algo_str),
         ("TMPL_FIELDS",        fields_html),
         ("TMPL_DOMAIN_NAME",   domain_name),
-        ("TMPL_TASK",          task_label),
         ("TMPL_DESC",          desc),
         ("TMPL_TITLE",         title),
     ]
