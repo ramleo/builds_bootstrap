@@ -1890,13 +1890,22 @@ def _generate_app(root, task_type, num_feats, cat_feats):
     ]
     if task_type == "classification":
         lines.append('label_encoder = joblib.load("models/label_encoder.pkl")')
+    import re as _re_ap
+    _id_set = {'id','index','serial','rowid','row','uuid','guid','pk','key','rid','sid'}
+    def _is_id(n): s=_re_ap.sub(r'[^a-z]','',n.lower()); return s in _id_set or (s.endswith('id') and len(s)<=6)
+    _id_col_names = [f for f in num_feats + cat_feats if _is_id(f)]
+    _non_id_num   = [f for f in num_feats if not _is_id(f)]
+    _non_id_cat   = [f for f in cat_feats if not _is_id(f)]
     lines += ['', 'class InputData(BaseModel):']
-    for feat in num_feats:
+    for feat in _non_id_num:
         lines.append('    ' + feat + ': Optional[float] = None')
-    for feat in cat_feats:
+    for feat in _non_id_cat:
         lines.append('    ' + feat + ': Optional[str] = None')
-    if not num_feats and not cat_feats:
+    if not _non_id_num and not _non_id_cat:
         lines.append('    pass')
+    if _id_col_names:
+        lines.append('')
+        lines.append('_ID_COLS = ' + repr(_id_col_names) + '  # injected as NaN at predict time')
     lines += [
         '',
         '@app.get("/")',
@@ -1913,6 +1922,7 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         '@app.post("/predict")',
         'def predict(data: InputData):',
         '    df = pd.DataFrame([data.dict()])',
+        '    for col in _ID_COLS: df[col] = float("nan")',
         '    pred = pipeline.predict(df)[0]',
     ]
     if task_type == "classification":
@@ -1929,6 +1939,7 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         '@app.post("/predict/batch")',
         'def predict_batch(data: List[InputData]):',
         '    df = pd.DataFrame([d.dict() for d in data])',
+        '    for col in _ID_COLS: df[col] = float("nan")',
         '    preds = pipeline.predict(df)',
     ]
     if task_type == "classification":
