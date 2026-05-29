@@ -1904,6 +1904,17 @@ else:
 
 results = []
 
+# ── Optional MLflow experiment tracking ──────────────────────────────────────
+_mlflow_ok = False
+try:
+    import mlflow, mlflow.sklearn
+    mlflow.set_tracking_uri("mlruns")
+    mlflow.set_experiment(project_name)
+    _mlflow_ok = True
+    _ok("MLflow tracking enabled  (mlruns/ folder)")
+except ImportError:
+    _warn("MLflow not installed — skipping tracking (pip install mlflow)")
+
 for name, estimator, param_grid in candidates:
     try:
         _info(f"Training {_B}{name}{_X} with GridSearchCV(cv=3)...")
@@ -1920,6 +1931,12 @@ for name, estimator, param_grid in candidates:
             "best_estimator": gs.best_estimator_,
         })
         _ok(f"{name}: CV {scoring} = {best_score:.4f}  params={best_params}")
+        if _mlflow_ok:
+            with mlflow.start_run(run_name=name):
+                mlflow.log_param("model", name)
+                mlflow.log_params({f"param_{k}": v for k, v in best_params.items()})
+                mlflow.log_metric(f"cv_{scoring}", best_score)
+                mlflow.sklearn.log_model(gs.best_estimator_, "model")
     except Exception as exc:
         _err(f"{name} failed, skipping: {exc}")
 
@@ -3356,7 +3373,7 @@ def _generate_app(root, task_type, num_feats, cat_feats):
             '            "feature_importance": _feature_importance}',
         ]
     else:
-        lines.append('    return {"prediction": float(pred)}')
+        lines.append('    return {"prediction": float(pred), "feature_importance": _feature_importance}')
     lines += [
         '',
         '@app.post("/predict/batch")',
@@ -3395,6 +3412,10 @@ def _generate_app(root, task_type, num_feats, cat_feats):
             '    return {"count": len(preds_up), "predictions": preds_up.tolist()}',
         ]
     lines += [
+        '',
+        '@app.get("/importance")',
+        'def importance():',
+        '    return {"feature_importance": _feature_importance}',
         '',
         'if __name__ == "__main__":',
         '    import uvicorn',
