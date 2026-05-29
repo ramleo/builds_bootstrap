@@ -890,6 +890,10 @@ tabulate==0.9.0
 scikit-learn==1.8.0
 joblib==1.5.3
 
+# Boosted trees (optional — faster & more accurate on medium/large datasets)
+lightgbm==4.3.0
+xgboost==2.0.3
+
 # Visualisation
 matplotlib==3.10.9
 seaborn==0.13.2
@@ -897,6 +901,7 @@ seaborn==0.13.2
 # API
 fastapi==0.136.3
 uvicorn==0.41.0
+python-multipart==0.0.9
 '''
 
 # ════════════════════════════════════════════════════════════════════
@@ -1606,6 +1611,22 @@ except ImportError as exc:
     _info("Run: .venv/bin/pip install -r requirements.txt")
     sys.exit(1)
 
+# Optional fast-tree boosters — skipped gracefully if not installed
+_HAS_LGBM = False
+_HAS_XGB  = False
+try:
+    from lightgbm import LGBMClassifier, LGBMRegressor
+    _HAS_LGBM = True
+    _ok("LightGBM available")
+except ImportError:
+    _warn("LightGBM not installed — skipping (pip install lightgbm)")
+try:
+    from xgboost import XGBClassifier, XGBRegressor
+    _HAS_XGB = True
+    _ok("XGBoost available")
+except ImportError:
+    _warn("XGBoost not installed — skipping (pip install xgboost)")
+
 _ok("All dependencies imported")
 
 # ════════════════════════════════════════════════════════════════════
@@ -1832,6 +1853,20 @@ if task_type == "classification":
             {"model__n_estimators": [100, 200], "model__learning_rate": [0.05, 0.1]},
         ),
     ]
+    if _HAS_LGBM:
+        candidates.append((
+            "LightGBM",
+            LGBMClassifier(random_state=42, verbose=-1),
+            {"model__n_estimators": [100, 300], "model__learning_rate": [0.05, 0.1],
+             "model__num_leaves": [31, 63]},
+        ))
+    if _HAS_XGB:
+        candidates.append((
+            "XGBoost",
+            XGBClassifier(random_state=42, eval_metric="logloss", verbosity=0),
+            {"model__n_estimators": [100, 300], "model__learning_rate": [0.05, 0.1],
+             "model__max_depth": [4, 6]},
+        ))
     scoring = "accuracy"
 else:
     candidates = [
@@ -1851,6 +1886,20 @@ else:
             {"model__n_estimators": [100, 200], "model__learning_rate": [0.05, 0.1]},
         ),
     ]
+    if _HAS_LGBM:
+        candidates.append((
+            "LightGBM",
+            LGBMRegressor(random_state=42, verbose=-1),
+            {"model__n_estimators": [100, 300], "model__learning_rate": [0.05, 0.1],
+             "model__num_leaves": [31, 63]},
+        ))
+    if _HAS_XGB:
+        candidates.append((
+            "XGBoost",
+            XGBRegressor(random_state=42, verbosity=0),
+            {"model__n_estimators": [100, 300], "model__learning_rate": [0.05, 0.1],
+             "model__max_depth": [4, 6]},
+        ))
     scoring = "r2"
 
 results = []
@@ -1946,6 +1995,34 @@ if label_encoder is not None:
     le_path = MODELS_DIR / "label_encoder.pkl"
     joblib.dump(label_encoder, le_path)
     _ok(f"Label encoder → {le_path}")
+
+# ── Feature importance (for SHAP-style explanation in the UI) ────────────────
+try:
+    import json as _json
+    _model_obj = final_pipe.named_steps["model"]
+    try:
+        _feat_names = list(final_pipe.named_steps["preprocessor"].get_feature_names_out())
+    except Exception:
+        _feat_names = num_feats + cat_feats
+    _importances = None
+    if hasattr(_model_obj, "feature_importances_"):
+        _importances = _model_obj.feature_importances_.tolist()
+    elif hasattr(_model_obj, "coef_"):
+        import numpy as _np2
+        _c = _model_obj.coef_
+        _importances = _np2.abs(_c[0] if _c.ndim > 1 else _c).tolist()
+    if _importances and _feat_names:
+        _fi_max = max(abs(v) for v in _importances) or 1
+        _fi_norm = sorted(
+            [{"feature": n, "importance": round(abs(v) / _fi_max, 4)}
+             for n, v in zip(_feat_names, _importances)],
+            key=lambda x: x["importance"], reverse=True
+        )[:15]
+        _fi_path = MODELS_DIR / "feature_importance.json"
+        _fi_path.write_text(_json.dumps(_fi_norm, indent=2))
+        _ok(f"Feature importance → {_fi_path}  ({len(_fi_norm)} features)")
+except Exception as _fie:
+    _warn(f"Feature importance skipped: {_fie}")
 
 # ════════════════════════════════════════════════════════════════════
 # 7.  Write docs/auto_summary.md
@@ -2874,6 +2951,16 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '            </button>\n'
         '          </form>\n'
         '\n'
+        '          <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.08)">\n'
+        '            <div style="color:rgba(255,255,255,.25);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Batch Predict via CSV</div>\n'
+        '            <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.2);border-radius:10px;cursor:pointer">\n'
+        '              <span style="font-size:1.1rem">&#128196;</span>\n'
+        '              <span id="uploadTxt" style="color:rgba(255,255,255,.5);font-size:.83rem">Drop CSV or click to upload</span>\n'
+        '              <input type="file" accept=".csv" id="csvFile" style="display:none">\n'
+        '            </label>\n'
+        '            <div id="batchResult" style="display:none;margin-top:8px;max-height:140px;overflow-y:auto;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:10px;font-size:.78rem;color:rgba(255,255,255,.65)"></div>\n'
+        '          </div>\n'
+        '\n'
         '          <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,.08)">\n'
         '            <div style="color:rgba(255,255,255,.25);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">About this model</div>\n'
         '            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">\n'
@@ -2926,6 +3013,11 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '              <div id="probBars"></div>\n'
         '            </div>\n'
         '\n'
+        '            <div id="fiSec" style="display:none;margin-bottom:16px">\n'
+        '              <div style="color:rgba(255,255,255,.28);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Key Factors</div>\n'
+        '              <div id="fiBars"></div>\n'
+        '            </div>\n'
+        '\n'
         '            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px;margin-top:auto">\n'
         '              <div style="color:rgba(255,255,255,.28);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Input Summary</div>\n'
         '              <div id="inputSummary" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.84rem"></div>\n'
@@ -2973,6 +3065,29 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '  var probBars    = document.getElementById(\'probBars\');\n'
         '  var errMsg      = document.getElementById(\'errMsg\');\n'
         '  var inputSum    = document.getElementById(\'inputSummary\');\n'
+        '  var fiSec       = document.getElementById(\'fiSec\');\n'
+        '  var fiBars      = document.getElementById(\'fiBars\');\n'
+        '  var csvFile     = document.getElementById(\'csvFile\');\n'
+        '  var batchResult = document.getElementById(\'batchResult\');\n'
+        '  var uploadTxt   = document.getElementById(\'uploadTxt\');\n'
+        '\n'
+        '  // ── CSV upload → /predict/upload ───────────────────────────────────────────\n'
+        '  if (csvFile) {\n'
+        '    csvFile.addEventListener(\'change\', function() {\n'
+        '      var f = csvFile.files[0]; if (!f) return;\n'
+        '      uploadTxt.textContent = f.name;\n'
+        '      var fd = new FormData(); fd.append(\'file\', f);\n'
+        '      batchResult.style.display = \'block\';\n'
+        '      batchResult.textContent = \'Uploading…\';\n'
+        '      fetch(\'/predict/upload\', {method:\'POST\', body:fd})\n'
+        '        .then(function(r){ if(!r.ok) throw new Error(\'HTTP \'+r.status); return r.json(); })\n'
+        '        .then(function(d){\n'
+        '          var preview = d.predictions.slice(0,20).join(\', \') + (d.count>20 ? \'…\' : \'\');\n'
+        '          batchResult.innerHTML = \'<b>\'+d.count+\' predictions:</b><br>\'+preview;\n'
+        '        })\n'
+        '        .catch(function(e){ batchResult.textContent = \'Upload failed: \'+e.message; });\n'
+        '    });\n'
+        '  }\n'
         '\n'
         '  // ── Server health check with cold-start retry ──────────────────────────────\n'
         '  var _healthTimer = null;\n'
@@ -3056,8 +3171,8 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '      var msg = err.message || String(err);\n'
         '      if (msg.indexOf(\'Failed to fetch\') !== -1 || msg.indexOf(\'NetworkError\') !== -1\n'
         '          || msg.indexOf(\'ERR_CONNECTION_REFUSED\') !== -1 || err instanceof TypeError) {\n'
-        '        msg = \'⚠ Cannot reach the API server.\\nThe server may have gone to sleep \u2014 please wait a moment.\';\n'
-        '        setServerState(\'offline\', \'Server offline \u2014 retrying\u2026\');\n'
+        '        msg = \'⚠ Cannot reach the API server.\\nThe server may have gone to sleep — please wait a moment.\';\n'
+        '        setServerState(\'offline\', \'Server offline — retrying…\');\n'
         '        if (!_healthTimer) _healthTimer = setInterval(checkServer, 5000);\n'
         '      }\n'
         '      showError(msg);\n'
@@ -3119,6 +3234,17 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '      inputSum.appendChild(d);\n'
         '    });\n'
         '\n'
+        '    if (data.feature_importance && data.feature_importance.length) {\n'
+        '      var fiMax = data.feature_importance[0].importance || 1;\n'
+        '      fiBars.innerHTML = data.feature_importance.slice(0,8).map(function(fi){\n'
+        '        var pct = Math.round(fi.importance / fiMax * 100);\n'
+        '        var lbl = fi.feature.replace(/x\\d+_/g,\'\').replace(/[_\\-]/g,\' \').trim();\n'
+        '        return \'<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:.76rem;margin-bottom:3px"><span style="color:rgba(255,255,255,.6)">\'+lbl+\'</span><span style="color:rgba(255,255,255,.4)">\'+pct+\'%</span></div>\'+\n'
+        '               \'<div style="height:5px;background:rgba(255,255,255,.08);border-radius:99px"><div style="height:5px;border-radius:99px;background:linear-gradient(90deg,TMPL_BTN,TMPL_ACCENT);width:\'+pct+\'%"></div></div></div>\';\n'
+        '      }).join(\'\');\n'
+        '      fiSec.style.display = \'block\';\n'
+        '    } else { fiSec.style.display = \'none\'; }\n'
+        '\n'
         '    resultState.style.display = \'flex\';\n'
         '    resultState.classList.remove(\'fade-up\');\n'
         '    void resultState.offsetWidth;\n'
@@ -3177,12 +3303,12 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         '#!/usr/bin/env python3',
         '"""Auto-generated FastAPI prediction API."""',
         'import os',
-        'from fastapi import FastAPI',
+        'from fastapi import FastAPI, UploadFile, File, HTTPException',
         'from fastapi.responses import FileResponse',
         'from fastapi.middleware.cors import CORSMiddleware',
         'from pydantic import BaseModel',
         'from typing import Optional, List',
-        'import joblib, pandas as pd',
+        'import joblib, pandas as pd, io, json, os',
         '',
         'app = FastAPI(title="ML Prediction API")',
         'app.add_middleware(',
@@ -3192,6 +3318,8 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         '    allow_headers=["*"],',
         ')',
         'pipeline = joblib.load("models/final_pipeline.pkl")',
+        '_fi_file = "models/feature_importance.json"',
+        '_feature_importance = json.load(open(_fi_file)) if os.path.exists(_fi_file) else []',
     ]
     if task_type == "classification":
         lines.append('label_encoder = joblib.load("models/label_encoder.pkl")')
@@ -3224,7 +3352,8 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         lines += [
             '    label = label_encoder.inverse_transform([pred])[0]',
             '    proba = pipeline.predict_proba(df)[0].tolist()',
-            '    return {"prediction": str(label), "probabilities": proba}',
+            '    return {"prediction": str(label), "probabilities": proba,',
+            '            "feature_importance": _feature_importance}',
         ]
     else:
         lines.append('    return {"prediction": float(pred)}')
@@ -3242,6 +3371,29 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         ]
     else:
         lines.append('    return {"predictions": preds.tolist()}')
+    lines += [
+        '',
+        '@app.post("/predict/upload")',
+        'async def predict_upload(file: UploadFile = File(...)):',
+        '    """Upload a CSV — returns predictions for every row."""',
+        '    if not file.filename.lower().endswith(".csv"):',
+        '        raise HTTPException(400, "Only CSV files are accepted")',
+        '    contents = await file.read()',
+        '    df_up = pd.read_csv(io.BytesIO(contents))',
+        '    preds_up = pipeline.predict(df_up)',
+    ]
+    if task_type == "classification":
+        lines += [
+            '    try:',
+            '        labels_up = label_encoder.inverse_transform(preds_up).tolist()',
+            '    except Exception:',
+            '        labels_up = [str(p) for p in preds_up]',
+            '    return {"count": len(labels_up), "predictions": labels_up}',
+        ]
+    else:
+        lines += [
+            '    return {"count": len(preds_up), "predictions": preds_up.tolist()}',
+        ]
     lines += [
         '',
         'if __name__ == "__main__":',
@@ -3424,6 +3576,49 @@ def _post_pipeline_menu(root, cfg, task_type, pipeline, label_encoder=None):
 # ── Run the post-pipeline menu ────────────────────────────────────────
 _post_pipeline_menu(ROOT, cfg, task_type, final_pipe, label_encoder)'''
 # .gitkeep for empty directories
+
+FILES[".github/workflows/ci-deploy.yml"] = '''name: CI / Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: App import check
+        run: python -c "from app import app; print('FastAPI app OK')"
+      - name: Model artefact check
+        run: |
+          python -c "
+          import joblib, pathlib
+          m = joblib.load('models/final_pipeline.pkl')
+          print('Model:', type(m).__name__)
+          assert pathlib.Path('index.html').exists(), 'index.html missing'
+          print('index.html OK')
+          "
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Trigger Render deploy
+        if: ${{ secrets.RENDER_DEPLOY_HOOK != '' }}
+        run: |
+          curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          echo "Render deploy triggered"
+'''
+
 FILES["data/.gitkeep"]   = ""
 FILES["models/.gitkeep"] = ""
 FILES["plots/.gitkeep"]  = ""
