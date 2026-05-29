@@ -3577,7 +3577,11 @@ def _post_pipeline_menu(root, cfg, task_type, pipeline, label_encoder=None):
 _post_pipeline_menu(ROOT, cfg, task_type, final_pipe, label_encoder)'''
 # .gitkeep for empty directories
 
-FILES[".github/workflows/ci-deploy.yml"] = '''name: CI / Deploy
+FILES[".github/workflows/ci.yml"] = '''name: CI
+
+# Runs on every push and pull request.
+# Render auto-deploys from GitHub for free — no deploy hook needed.
+# Just connect your repo in Render dashboard and enable Auto-Deploy.
 
 on:
   push:
@@ -3590,13 +3594,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
       - name: App import check
         run: python -c "from app import app; print('FastAPI app OK')"
+
       - name: Model artefact check
         run: |
           python -c "
@@ -3606,17 +3615,6 @@ jobs:
           assert pathlib.Path('index.html').exists(), 'index.html missing'
           print('index.html OK')
           "
-
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - name: Trigger Render deploy
-        if: ${{ secrets.RENDER_DEPLOY_HOOK != '' }}
-        run: |
-          curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
-          echo "Render deploy triggered"
 '''
 
 FILES["data/.gitkeep"]   = ""
