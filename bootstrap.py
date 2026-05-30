@@ -3043,7 +3043,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '    .sum-lbl { flex:1.3; font-size:.84rem; color:rgba(255,255,255,.35); }\n'
         '    .sum-val { flex:0 0 auto; min-width:52px; text-align:right; font-weight:500; font-size:.84rem; color:#fff; padding-right:16px; }\n'
         '    .sum-val:last-child { padding-right:0; }\n'
-        '    .sum-val + .sum-lbl { border-left:1px solid rgba(255,255,255,.09); padding-left:16px; margin-left:8px; }\n'
+        '    .sum-val + .sum-lbl { border-left:1px solid rgba(255,255,255,.22); padding-left:16px; margin-left:8px; }\n'
         '\n'
         '    @media (max-width: 768px) {\n'
         '      #mainGrid { grid-template-columns: 1fr !important; }\n'
