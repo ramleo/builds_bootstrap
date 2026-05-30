@@ -1331,10 +1331,6 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
     _acc          = cfg.get("test_accuracy")
     accuracy_str  = (f"{_acc:.1%}" if _acc is not None else "—")
     acc_color     = "#4ade80" if (_acc or 0) >= 0.9 else ("#facc15" if (_acc or 0) >= 0.7 else "#f87171")
-    algo_str      = cfg.get("best_model", "—")
-    _acc          = cfg.get("test_accuracy")
-    accuracy_str  = (f"{_acc:.1%}" if _acc is not None else "—")
-    acc_color     = "#4ade80" if (_acc or 0) >= 0.9 else ("#facc15" if (_acc or 0) >= 0.7 else "#f87171")
     task_label    = "Classification" if task_type == "classification" else "Regression"
     feat_count    = str(len(num_feats) + len(cat_feats))
     classes_count = str(len(classes)) if task_type == "classification" else "&mdash;"
@@ -1605,7 +1601,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '              <div style="color:rgba(255,255,255,.28);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Confidence Interval <span style="font-weight:400;opacity:.6">(±1σ &middot; ~68%)</span></div>\n'
         '              <div style="display:flex;justify-content:space-between;font-size:.8rem;color:rgba(255,255,255,.5);margin-bottom:6px"><span id="ciLower">—</span><span style="color:rgba(255,255,255,.3)">range</span><span id="ciUpper">—</span></div>\n'
         '              <div style="height:8px;background:rgba(255,255,255,.06);border-radius:99px;position:relative">\n'
-        '                <div style="position:absolute;height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,rgba(TMPL_BTN_R,.35),rgba(TMPL_BTN_R,.6))"></div>\n'
+        '                <div style="position:absolute;height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,TMPL_BTN59,TMPL_BTN99)"></div>\n'
         '                <div id="ciDot" style="position:absolute;width:12px;height:12px;border-radius:50%;background:TMPL_BTN;top:50%;transform:translate(-50%,-50%);box-shadow:0 0 8px TMPL_BTN66"></div>\n'
         '              </div>\n'
         '            </div>\n'
@@ -1916,7 +1912,8 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         ("TMPL_METRIC_LABEL",  "R²" if task_type == "classification" else "R² / MAE"),
         ("TMPL_METRIC_LABEL2", "Classes" if task_type == "classification" else "Est. Error"),
         ("TMPL_METRIC_VAL2",   classes_count if task_type == "classification" else "—"),
-        ("TMPL_BTN_R",         btn.lstrip("#")),
+        ("TMPL_BTN59",         btn + "59"),
+        ("TMPL_BTN99",         btn + "99"),
         ("TMPL_BTN66",         btn + "66"),
         ("TMPL_ALGO",          algo_str),
         ("TMPL_FIELDS",        fields_html),
