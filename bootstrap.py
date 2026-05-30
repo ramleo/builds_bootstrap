@@ -2042,6 +2042,31 @@ except Exception as _fie:
     _warn(f"Feature importance skipped: {_fie}")
 
 # ════════════════════════════════════════════════════════════════════
+# 6c. Save regression metrics (R², MAE, RMSE, target stats)
+# ════════════════════════════════════════════════════════════════════
+if task_type == 'regression':
+    try:
+        from sklearn.metrics import r2_score as _r2s, mean_absolute_error as _mae_fn, mean_squared_error as _mse_fn
+        import numpy as _np2
+        _p = final_pipe.predict(X_test)
+        _metrics_out = {
+            'task': 'regression',
+            'r2':   round(float(_r2s(y_test, _p)), 4),
+            'mae':  round(float(_mae_fn(y_test, _p)), 2),
+            'rmse': round(float(_mse_fn(y_test, _p)**0.5), 2),
+            'target_mean': round(float(_np2.mean(y)), 2),
+            'target_std':  round(float(_np2.std(y)), 2),
+            'target_min':  round(float(_np2.min(y)), 2),
+            'target_max':  round(float(_np2.max(y)), 2),
+        }
+        import json as _js
+        _mp = MODELS_DIR / 'metrics.json'
+        _mp.write_text(_js.dumps(_metrics_out, indent=2))
+        _ok(f'Metrics → {_mp}  R²={_metrics_out["r2"]}  MAE={_metrics_out["mae"]}  RMSE={_metrics_out["rmse"]}')
+    except Exception as _me:
+        _warn(f'Metrics save skipped: {_me}')
+
+# ════════════════════════════════════════════════════════════════════
 # 7.  Write docs/auto_summary.md
 # ════════════════════════════════════════════════════════════════════
 
@@ -2986,12 +3011,12 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '                <div style="color:#fff;font-weight:600;font-size:.82rem">TMPL_ALGO</div>\n'
         '              </div>\n'
         '              <div class="mini-stat">\n'
-        '                <div style="color:rgba(255,255,255,.35);font-size:.7rem;margin-bottom:4px">Accuracy</div>\n'
-        '                <div style="color:TMPL_ACC_COLOR;font-weight:700;font-size:.82rem">TMPL_ACCURACY</div>\n'
+        '                <div style="color:rgba(255,255,255,.35);font-size:.7rem;margin-bottom:4px" id="metricLabel">TMPL_METRIC_LABEL</div>\n'
+        '                <div style="color:TMPL_ACC_COLOR;font-weight:700;font-size:.82rem" id="metricValue">TMPL_ACCURACY</div>\n'
         '              </div>\n'
         '              <div class="mini-stat">\n'
-        '                <div style="color:rgba(255,255,255,.35);font-size:.7rem;margin-bottom:4px">Classes</div>\n'
-        '                <div style="color:#fff;font-weight:600;font-size:.82rem">TMPL_CLASSES_COUNT</div>\n'
+        '                <div style="color:rgba(255,255,255,.35);font-size:.7rem;margin-bottom:4px" id="metricLabel2">TMPL_METRIC_LABEL2</div>\n'
+        '                <div style="color:#fff;font-weight:600;font-size:.82rem" id="metricValue2">TMPL_METRIC_VAL2</div>\n'
         '              </div>\n'
         '            </div>\n'
         '          </div>\n'
@@ -3025,6 +3050,15 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '              <div id="resConf" style="color:rgba(255,255,255,.45);font-size:.9rem"></div>\n'
         '            </div>\n'
         '\n'
+        '            <div id="benchmarkBadge" style="display:none;font-size:.78rem;font-weight:600;padding:4px 14px;border-radius:99px;margin-bottom:12px"></div>\n'
+        '            <div id="ciSec" style="display:none;margin-bottom:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px">\n'
+        '              <div style="color:rgba(255,255,255,.28);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Confidence Interval <span style="font-weight:400;opacity:.6">(±1σ &middot; ~68%)</span></div>\n'
+        '              <div style="display:flex;justify-content:space-between;font-size:.8rem;color:rgba(255,255,255,.5);margin-bottom:6px"><span id="ciLower">—</span><span style="color:rgba(255,255,255,.3)">range</span><span id="ciUpper">—</span></div>\n'
+        '              <div style="height:8px;background:rgba(255,255,255,.06);border-radius:99px;position:relative">\n'
+        '                <div style="position:absolute;height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,rgba(TMPL_BTN_R,.35),rgba(TMPL_BTN_R,.6))"></div>\n'
+        '                <div id="ciDot" style="position:absolute;width:12px;height:12px;border-radius:50%;background:TMPL_BTN;top:50%;transform:translate(-50%,-50%);box-shadow:0 0 8px TMPL_BTN66"></div>\n'
+        '              </div>\n'
+        '            </div>\n'
         '            <div id="probSec" style="display:none;margin-bottom:20px">\n'
         '              <div style="color:rgba(255,255,255,.28);font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Class Probabilities</div>\n'
         '              <div id="probBars"></div>\n'
@@ -3088,6 +3122,17 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '  var batchResult = document.getElementById(\'batchResult\');\n'
         '  var uploadTxt   = document.getElementById(\'uploadTxt\');\n'
         '\n'
+        '  // Populate About strip from /metrics\n'
+        '  fetch(\'/metrics\').then(function(r){return r.json();}).then(function(m){\n'
+        '    if(!m||!m.task) return;\n'
+        '    var ml=document.getElementById(\'metricLabel\'),mv=document.getElementById(\'metricValue\');\n'
+        '    var ml2=document.getElementById(\'metricLabel2\'),mv2=document.getElementById(\'metricValue2\');\n'
+        '    if(m.task===\'regression\'){\n'
+        '      if(m.r2!==undefined&&m.r2>=0.7){ml.textContent=\'R²\';mv.textContent=m.r2.toFixed(3);mv.style.color=m.r2>=0.9?\'#4ade80\':\'#facc15\';}\n'
+        '      else if(m.mae!==undefined){ml.textContent=\'MAE\';mv.textContent=\'±\'+Math.round(m.mae);mv.style.color=\'#facc15\';}\n'
+        '      if(ml2&&m.rmse!==undefined){ml2.textContent=\'Est. Error\';mv2.textContent=\'±\'+Math.round(m.rmse);}\n'
+        '    }\n'
+        '  }).catch(function(){});\n'
         '  // ── CSV upload → /predict/upload ───────────────────────────────────────────\n'
         '  if (csvFile) {\n'
         '    csvFile.addEventListener(\'change\', function() {\n'
@@ -3236,9 +3281,28 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '        });\n'
         '      }, 60);\n'
         '    } else {\n'
-        '      resLabel.textContent = \'Predicted Value\';\n'
-        '      resConf.textContent  = \'\';\n'
+        '      resLabel.textContent = \'Estimated Value\';\n'
         '      probSec.style.display = \'none\';\n'
+        '      if (data.ci_lower !== undefined && data.ci_upper !== undefined) {\n'
+        '        var lo = data.ci_lower, hi = data.ci_upper, pred = data.prediction;\n'
+        '        document.getElementById(\'ciLower\').textContent = lo < 0 ? \'0\' : lo.toFixed(2);\n'
+        '        document.getElementById(\'ciUpper\').textContent = hi.toFixed(2);\n'
+        '        resConf.textContent = \'Range: \' + (lo < 0 ? \'0\' : lo.toFixed(0)) + \' – \' + hi.toFixed(0) + \'  (±1σ)\';\n'
+        '        var leftPct = hi > lo ? ((pred-lo)/(hi-lo)*0.8) : 0.5;\n'
+        '        document.getElementById(\'ciDot\').style.left = Math.max(5,Math.min(95,leftPct*100)).toFixed(1)+\'%\';\n'
+        '        document.getElementById(\'ciSec\').style.display = \'block\';\n'
+        '      } else { resConf.textContent = \'\'; }\n'
+        '      var m = data.metrics || {};\n'
+        '      if (m.target_mean !== undefined) {\n'
+        '        var sig = (data.prediction - m.target_mean) / (m.target_std || 1);\n'
+        '        var bb = document.getElementById(\'benchmarkBadge\');\n'
+        '        if (bb) {\n'
+        '          var bl=sig<-0.5?\'Below Average\':sig>0.5?\'Above Average\':\'Near Average\';\n'
+        '          var bc=sig<-0.5?\'#4ade80\':sig>0.5?\'#f87171\':\'#facc15\';\n'
+        '          bb.textContent=bl; bb.style.color=bc; bb.style.background=\'rgba(255,255,255,.06)\';\n'
+        '          bb.style.border=\'1px solid \'+bc+\'44\'; bb.style.display=\'inline-block\';\n'
+        '        }\n'
+        '      }\n'
         '    }\n'
         '\n'
         '    inputSum.innerHTML = \'\';\n'
@@ -3299,6 +3363,11 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         ("TMPL_CLASSES",       classes_js),
         ("TMPL_ACCURACY",      accuracy_str),
         ("TMPL_ACC_COLOR",     acc_color),
+        ("TMPL_METRIC_LABEL",  "R²" if task_type == "classification" else "R² / MAE"),
+        ("TMPL_METRIC_LABEL2", "Classes" if task_type == "classification" else "Est. Error"),
+        ("TMPL_METRIC_VAL2",   classes_count if task_type == "classification" else "—"),
+        ("TMPL_BTN_R",         btn.lstrip("#")),
+        ("TMPL_BTN66",         btn + "66"),
         ("TMPL_ALGO",          algo_str),
         ("TMPL_FIELDS",        fields_html),
         ("TMPL_DOMAIN_NAME",   domain_name),
@@ -3340,6 +3409,8 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         'pipeline = joblib.load("models/final_pipeline.pkl")',
         '_fi_file = "models/feature_importance.json"',
         '_feature_importance = json.load(open(_fi_file)) if os.path.exists(_fi_file) else []',
+        '_metrics  = json.load(open("models/metrics.json")) if os.path.exists("models/metrics.json") else {}',
+        '_rmse     = _metrics.get("rmse")',
     ]
     if task_type == "classification":
         lines.append('label_encoder = joblib.load("models/label_encoder.pkl")')
@@ -3386,7 +3457,14 @@ def _generate_app(root, task_type, num_feats, cat_feats):
             '            "feature_importance": _feature_importance}',
         ]
     else:
-        lines.append('    return {"prediction": float(pred), "feature_importance": _feature_importance}')
+        lines += [
+            '    result = {"prediction": float(pred), "feature_importance": _feature_importance}',
+            '    if _rmse:',
+            '        result["ci_lower"] = round(float(pred) - _rmse, 2)',
+            '        result["ci_upper"] = round(float(pred) + _rmse, 2)',
+            '    result["metrics"] = _metrics',
+            '    return result',
+        ]
     lines += [
         '',
         '@app.post("/predict/batch")',
@@ -3426,6 +3504,10 @@ def _generate_app(root, task_type, num_feats, cat_feats):
             '    return {"count": len(preds_up), "predictions": preds_up.tolist()}',
         ]
     lines += [
+        '',
+        '@app.get("/metrics")',
+        'def metrics_endpoint():',
+        '    return _metrics',
         '',
         '@app.get("/importance")',
         'def importance():',
