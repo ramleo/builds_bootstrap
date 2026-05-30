@@ -2066,6 +2066,21 @@ if task_type == 'regression':
     except Exception as _me:
         _warn(f'Metrics save skipped: {_me}')
 
+# Feature ranges for slider UI
+try:
+    import json as _js2
+    _rng_rows = {}
+    for _c in num_feats:
+        if _c in X.columns:
+            _mn, _mx = float(X[_c].min()), float(X[_c].max())
+            _pad = (_mx - _mn) * 0.05
+            _mag = 10 ** max(0, int(len(str(int(_mx))) - 2))
+            _rng_rows[_c] = {'min': round(max(0,_mn),2), 'max': round(_mx+_pad,2), 'step': max(1,_mag//100)}
+    (_rp := MODELS_DIR / 'feature_ranges.json').write_text(_js2.dumps(_rng_rows, indent=2))
+    _ok(f'Feature ranges → {_rp}')
+except Exception as _re:
+    _warn(f'Feature ranges skipped: {_re}')
+
 # ════════════════════════════════════════════════════════════════════
 # 7.  Write docs/auto_summary.md
 # ════════════════════════════════════════════════════════════════════
@@ -2929,6 +2944,20 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '\n'
         '    ::-webkit-scrollbar { width: 5px; }\n'
         '    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }\n'
+        '    .slider { -webkit-appearance:none; appearance:none; width:100%; height:4px; margin-top:6px;\n'
+        '      background:rgba(255,255,255,.13); border-radius:99px; outline:none; cursor:pointer; display:block; }\n'
+        '    .slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px;\n'
+        '      border-radius:50%; background:TMPL_BTN; cursor:pointer; box-shadow:0 0 6px TMPL_BTN66; }\n'
+        '    .slider::-moz-range-thumb { width:14px; height:14px; border-radius:50%;\n'
+        '      background:TMPL_BTN; cursor:pointer; border:none; }\n'
+        '    .hist-table { width:100%; border-collapse:collapse; font-size:.8rem; }\n'
+        '    .hist-table th { padding:8px 12px; text-align:left; color:rgba(255,255,255,.3); font-size:.68rem;\n'
+        '      font-weight:700; text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid rgba(255,255,255,.08); white-space:nowrap; }\n'
+        '    .hist-table td { padding:9px 12px; color:rgba(255,255,255,.65); border-bottom:1px solid rgba(255,255,255,.04); white-space:nowrap; }\n'
+        '    .hist-table tr:last-child td { border-bottom:none; }\n'
+        '    .hist-table tr:hover td { background:rgba(255,255,255,.03); }\n'
+        '    .hist-table .pred-col { color:#fff; font-weight:700; }\n'
+        '    .hist-table .run-col  { color:rgba(255,255,255,.25); }\n'
         '\n'
         '    @media (max-width: 768px) {\n'
         '      #mainGrid { grid-template-columns: 1fr !important; }\n'
@@ -3077,6 +3106,18 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '            <div class="err-box" id="errMsg"></div>\n'
         '          </div>\n'
         '\n'
+        '        </div>\n'
+        '      </div>\n'
+        '\n'
+        '      <!-- Comparison table -->\n'
+        '      <div id="histSection" style="display:none;margin-top:24px">\n'
+        '        <div class="glass" style="border-radius:16px;padding:20px 24px">\n'
+        '          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">\n'
+        '            <div><span style="color:#fff;font-weight:700;font-size:.95rem">Prediction History</span>\n'
+        '            <span id="histCount" style="color:rgba(255,255,255,.3);font-size:.8rem;margin-left:8px"></span></div>\n'
+        '            <button onclick="clearHistory()" style="padding:5px 14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.55);font-size:.78rem;cursor:pointer">Clear</button>\n'
+        '          </div>\n'
+        '          <div style="overflow-x:auto"><table class="hist-table"><thead id="histHead"></thead><tbody id="histBody"></tbody></table></div>\n'
         '        </div>\n'
         '      </div>\n'
         '\n'
@@ -3330,6 +3371,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '    void resultState.offsetWidth;\n'
         '    resultState.classList.add(\'fade-up\');\n'
         '    errState.style.display = \'none\';\n'
+        '    addToHistory(data);\n'
         '  }\n'
         '\n'
         '  function showError(msg) {\n'
@@ -3338,6 +3380,76 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         '    resultState.style.display = \'none\';\n'
         '    emptyState.style.display  = \'none\';\n'
         '  }\n'
+        '\n'
+        '  // ── Sliders ────────────────────────────────────────────────\n'
+        '  var _debounceTimer = null;\n'
+        '  function debouncedPredict(ms) {\n'
+        '    clearTimeout(_debounceTimer);\n'
+        '    _debounceTimer = setTimeout(function() {\n'
+        '      if (_serverReady) pForm.dispatchEvent(new Event(\'submit\',{bubbles:true,cancelable:true}));\n'
+        '    }, ms || 400);\n'
+        '  }\n'
+        '  function initSliders(ranges) {\n'
+        '    document.querySelectorAll(\'.inp[type="number"]\').forEach(function(inp) {\n'
+        '      var fname = inp.name, key = fname.replace(/\\s+/g,\'_\');\n'
+        '      var r = (ranges && ranges[fname]) || {min:0, max:100, step:1};\n'
+        '      var lbl = inp.parentElement.querySelector(\'.inp-lbl\');\n'
+        '      if (lbl && !lbl.querySelector(\'.sv\')) {\n'
+        '        var sv = document.createElement(\'span\'); sv.className=\'sv\'; sv.id=\'sv_\'+key;\n'
+        '        sv.style.cssText=\'float:right;color:TMPL_BTN;font-size:.73rem;font-weight:600\';\n'
+        '        lbl.appendChild(sv);\n'
+        '      }\n'
+        '      if (!document.getElementById(\'sl_\'+key)) {\n'
+        '        var sl = document.createElement(\'input\'); sl.type=\'range\'; sl.className=\'slider\';\n'
+        '        sl.id=\'sl_\'+key; sl.min=r.min; sl.max=r.max; sl.step=r.step;\n'
+        '        inp.parentElement.appendChild(sl);\n'
+        '        var sv2 = document.getElementById(\'sv_\'+key);\n'
+        '        inp.addEventListener(\'input\', function() {\n'
+        '          var v=parseFloat(this.value);\n'
+        '          if (!isNaN(v)&&v>=0) { if(v>parseFloat(sl.max))sl.max=Math.ceil(v*2); sl.value=v; if(sv2)sv2.textContent=v.toLocaleString(); }\n'
+        '          else { if(sv2)sv2.textContent=\'\'; } debouncedPredict(420);\n'
+        '        });\n'
+        '        sl.addEventListener(\'input\', function() {\n'
+        '          inp.value=this.value; if(sv2)sv2.textContent=Number(this.value).toLocaleString(); debouncedPredict(300);\n'
+        '        });\n'
+        '      }\n'
+        '    });\n'
+        '  }\n'
+        '  fetch(\'/ranges\').then(function(r){return r.json();}).then(function(rng){initSliders(rng);}).catch(function(){initSliders(null);});\n'
+        '\n'
+        '  // ── Prediction history ─────────────────────────────────────\n'
+        '  var _history=[], _histKeyFields=TMPL_HIST_COLS;\n'
+        '  function addToHistory(data) {\n'
+        '    var e={inputs:{},prediction:data.prediction,ci_lower:data.ci_lower,ci_upper:data.ci_upper,metrics:data.metrics};\n'
+        '    document.querySelectorAll(\'#pForm .inp\').forEach(function(inp){if(inp.value!==\'\')e.inputs[inp.name]=inp.value;});\n'
+        '    _history.push(e); renderHistory();\n'
+        '  }\n'
+        '  function renderHistory() {\n'
+        '    if(_history.length<2) return;\n'
+        '    var hs=document.getElementById(\'histSection\'); hs.style.display=\'block\';\n'
+        '    document.getElementById(\'histCount\').textContent=\'(\'+_history.length+\' runs)\';\n'
+        '    var cols=[\'#\'].concat(_histKeyFields).concat(IS_CLASS?[\'Prediction\',\'Confidence\']:[\'Prediction\',\'Range\',\'vs Avg\']);\n'
+        '    document.getElementById(\'histHead\').innerHTML=\'<tr>\'+cols.map(function(c){return\'<th>\'+c+\'</th>\';}).join(\'\')+ \'</tr>\';\n'
+        '    document.getElementById(\'histBody\').innerHTML=_history.map(function(e,i){\n'
+        '      var prev=i>0?_history[i-1]:null;\n'
+        '      var cells=_histKeyFields.map(function(col){\n'
+        '        var v=e.inputs[col]!==undefined?e.inputs[col]:\'—\';\n'
+        '        var changed=prev&&prev.inputs[col]!==e.inputs[col];\n'
+        '        return \'<td style="\'+( changed?\'color:#fff;font-weight:600\':\'\')+\'">\'+v+\'</td>\';\n'
+        '      });\n'
+        '      var predCell=IS_CLASS?\'<td class="pred-col">\'+String(e.prediction)+\'</td>\'+\n'
+        '        \'<td>\'+( typeof e.probabilities!==\'undefined\'?\'—\':\'—\')+\'</td>\' :\n'
+        '        \'<td class="pred-col">\'+Number(e.prediction).toFixed(2)+\'</td>\'+\n'
+        '        \'<td>\'+( e.ci_lower!==undefined?(Math.max(0,e.ci_lower).toFixed(0)+\' – \'+e.ci_upper.toFixed(0)):\'—\')+\'</td>\'+\n'
+        '        (function(){var m=e.metrics||{};if(m.target_mean===undefined)return\'<td>—</td>\';\n'
+        '          var s=(e.prediction-m.target_mean)/(m.target_std||1);\n'
+        '          var l=s<-0.5?\'↓ Below\':s>0.5?\'↑ Above\':\'→ Avg\';\n'
+        '          var c=s<-0.5?\'#4ade80\':s>0.5?\'#f87171\':\'#facc15\';\n'
+        '          return\'<td style="color:\'+c+\';font-weight:600">\'+l+\'</td>\';})();\n'
+        '      return \'<tr><td class="run-col">\'+( i+1)+\'</td>\'+cells.join(\'\')+ predCell+\'</tr>\';\n'
+        '    }).join(\'\');\n'
+        '  }\n'
+        '  function clearHistory(){ _history=[]; document.getElementById(\'histSection\').style.display=\'none\'; }\n'
         '</script>\n'
         '</body>\n'
         '</html>\n'
@@ -3367,6 +3479,7 @@ def _generate_frontend(root, cfg, task_type, num_feats, cat_feats, label_encoder
         ("TMPL_BTN66",         btn + "66"),
         ("TMPL_ALGO",          algo_str),
         ("TMPL_FIELDS",        fields_html),
+        ("TMPL_HIST_COLS",     str([f for f in (num_feats + cat_feats)[:4] if not any(f.lower().replace("_","").startswith(x) for x in ["id","pass","serial"])])),
         ("TMPL_DOMAIN_NAME",   domain_name),
         ("TMPL_DESC",          desc),
         ("TMPL_TITLE",         title),
@@ -3408,6 +3521,7 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         '_feature_importance = json.load(open(_fi_file)) if os.path.exists(_fi_file) else []',
         '_metrics  = json.load(open("models/metrics.json")) if os.path.exists("models/metrics.json") else {}',
         '_rmse     = _metrics.get("rmse")',
+        '_ranges   = json.load(open("models/feature_ranges.json")) if os.path.exists("models/feature_ranges.json") else {}',
     ]
     if task_type == "classification":
         lines.append('label_encoder = joblib.load("models/label_encoder.pkl")')
@@ -3505,6 +3619,10 @@ def _generate_app(root, task_type, num_feats, cat_feats):
         '@app.get("/metrics")',
         'def metrics_endpoint():',
         '    return _metrics',
+        '',
+        '@app.get("/ranges")',
+        'def ranges_endpoint():',
+        '    return _ranges',
         '',
         '@app.get("/importance")',
         'def importance():',
